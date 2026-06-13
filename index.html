@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mundial 2026</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="kicker">Campeonato do Mundo FIFA · United 2026</div>
+        <h1>Mundial <span class="yr">’26</span></h1>
+        <div class="sub">
+          48 seleções · 12 grupos · 104 jogos · 11 de junho — 19 de julho de
+          2026 · horas de Portugal Continental
+        </div>
+        <div class="hosts">🇨🇦 🇲🇽 🇺🇸</div>
+        <hr class="rule">
+      </header>
+
+      <nav>
+        <a href="#groups">Grupos</a>
+        <a href="#thirds">Melhores 3.ªˢ</a>
+        <a href="#bracket">Quadro</a>
+        <span class="prog" id="prog"></span>
+        <button
+          type="button"
+          id="themeBtn"
+          class="theme"
+          title="Alternar entre claro e escuro"
+        >
+          ◐ Escuro
+        </button>
+        <button
+          type="button"
+          id="resetBtn"
+          title="Limpar todos os resultados e cartões inseridos"
+        >
+          Limpar tudo
+        </button>
+        <button
+          type="button"
+          id="clearResultsBtn"
+          title="Limpar apenas os resultados, mantém os cartões"
+        >
+          Limpar resultados
+        </button>
+        <button type="button" id="fetchBtn" class="fetch">
+          📥 Obter resultados
+        </button>
+        <button type="button" id="syncBtn" class="sync">
+          🔴 Manter sincronizado
+        </button>
+      </nav>
+
+      <section id="groups">
+        <div class="sec-head">
+          <span class="no">01</span>
+          <h2>Fase de Grupos</h2>
+          <span class="hint"
+            >Escreve os resultados — as classificações e o quadro atualizam-se
+            ao momento.</span
+          >
+        </div>
+        <p class="sec-note">
+          Os empates em pontos seguem a ordem oficial da FIFA: pontos no
+          confronto direto → diferença de golos no confronto direto → golos
+          marcados no confronto direto (reaplicados entre equipas ainda
+          empatadas) → diferença de golos total → golos marcados totais →
+          pontuação de conduta (fair play) → ranking FIFA de 11 de junho de 2026
+          (já guardado para as 48 seleções, assinalado com
+          <span class="tiemark">R</span>
+          quando usado). Os cartões para o desempate por conduta inserem-se em
+          “dados de desempate” em cada grupo.
+        </p>
+        <div class="groups" id="groupsGrid"></div>
+      </section>
+
+      <section id="thirds">
+        <div class="sec-head">
+          <span class="no">02</span>
+          <h2>Classificação das Terceiras</h2>
+          <span class="hint"
+            >As 8 melhores de 12 apuram-se · pontos → dif. golos → golos →
+            conduta → ranking FIFA</span
+          >
+        </div>
+        <p class="sec-note">
+          A linha vermelha tracejada é o corte. Os adversários nos 16 avos de
+          final seguem o Anexo C da FIFA — as 495 combinações possíveis estão
+          incluídas, por isso o quadro emparelha exatamente como a FIFA fará
+          quando todos os grupos terminarem.
+        </p>
+        <div class="thirdwrap" id="thirdsWrap"></div>
+      </section>
+
+      <section id="bracket">
+        <div class="sec-head">
+          <span class="no">03</span>
+          <h2>Fase a Eliminar</h2>
+          <span class="hint"
+            >16 avos de final → Final · em caso de empate, escolhe quem passa no
+            prolongamento / penáltis</span
+          >
+        </div>
+        <div class="brwrap">
+          <div class="brlabels">
+            <div class="roundlbl">16 avos · 28 jun–3 jul</div>
+            <div class="roundlbl">Oitavos · 4–7 jul</div>
+            <div class="roundlbl">Quartos · 9–12 jul</div>
+            <div class="roundlbl">Meias-finais · 14–15 jul</div>
+            <div class="roundlbl">Final · 19 jul · NI/NJ</div>
+          </div>
+          <div class="bracket" id="bracketGrid"></div>
+        </div>
+      </section>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.5.0/schema.json",
+    "files": {
+        "includes": ["**", "!icons/*.svg"]
+    },
+    "html": {
+        "formatter": {
+            "enabled": true
+        }
+    },
+    "json": {
+        "formatter": {
+            "indentWidth": 4
+        }
+    },
+    "formatter": {
+        "indentStyle": "space"
+    }
+}
