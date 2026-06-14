@@ -1,3 +1,10 @@
+/* Log all fetch() calls to console */
+const _origFetch = window.fetch;
+window.fetch = function (url, ...rest) {
+  console.log("[api]", typeof url === "string" ? url : url.url || url);
+  return _origFetch.call(this, url, ...rest);
+};
+
 /* All 48 teams: ISO-style code -> { name, flag, fifaRank }
 	 fifaRank = position in the FIFA Men's World Ranking of 11 June 2026,
 	 used automatically as the final tie-breaker. */
@@ -1152,7 +1159,7 @@ const KNOCKOUT_MATCHES = [
   {
     id: 77,
     slots: ["1I", "T77"],
-    when: "30/06 · 22:00 · Nova Iorque/NJ",
+    when: "30/06 · 22:00 · Nova Iorque",
     thirdFromGroups: "C/D/F/G/H",
     channels: ["s"],
   },
@@ -1243,7 +1250,7 @@ const KNOCKOUT_MATCHES = [
   {
     id: 91,
     slots: ["W76", "W78"],
-    when: "05/07 · 21:00 · Nova Iorque/NJ",
+    when: "05/07 · 21:00 · Nova Iorque",
     channels: ["s"],
   },
   {
@@ -1321,7 +1328,7 @@ const KNOCKOUT_MATCHES = [
   {
     id: 104,
     slots: ["W101", "W102"],
-    when: "19/07 · 20:00 · Nova Iorque/NJ",
+    when: "19/07 · 20:00 · Nova Iorque",
     channels: ["rtp", "s", "lm"],
   },
 ];
@@ -1331,7 +1338,7 @@ KNOCKOUT_MATCHES.forEach((match) => {
 });
 
 /* Visual layout of the bracket grid: which matches go in each column,
-	 and how many grid rows each match box spans. */
+   and how many grid rows each match box spans. */
 const BRACKET_COLUMNS = [
   {
     column: 1,
@@ -2261,9 +2268,13 @@ function knockoutBoxHTML(matchId, context, extraClass) {
 
   /* emphasise time in date-time-venue string, like group stage does */
   const whenParts = match.when.split("·").map((p) => p.trim());
+  const venue =
+    whenParts[2] === "Cidade do México"
+      ? '<span class="v-full">Cidade do México</span><span class="v-short">Cd. do México</span>'
+      : whenParts[2];
   const whenHTML =
     whenParts.length === 3
-      ? `${whenParts[0]} · <b>${whenParts[1]}</b> · ${whenParts[2]}`
+      ? `${whenParts[0]} · <b>${whenParts[1]}</b> · ${venue}`
       : match.when;
 
   return `<div class="bk ${extraClass || ""}">
@@ -2276,7 +2287,14 @@ function knockoutBoxHTML(matchId, context, extraClass) {
   </div>`;
 }
 
-function renderBracket(context) {
+function renderBracketGrid(context) {
+  const titles = [
+    "16 avos de final · 28 jun–3 jul",
+    "Oitavos · 4–7 jul",
+    "Quartos · 9–12 jul",
+    "Meias-finais · 14–15 jul",
+    "Final · 19 jul · NI/NJ",
+  ];
   let html = "";
   BRACKET_COLUMNS.forEach((columnSpec) => {
     columnSpec.matchIds.forEach((matchId, index) => {
@@ -2301,11 +2319,15 @@ function renderBracket(context) {
       ${knockoutBoxHTML(THIRD_PLACE_MATCH_ID, context, "bronze")}
     </div>
   </div>`;
-  document.getElementById("bracketGrid").innerHTML = html;
+  document.getElementById("bracketGrid").className = "bracket-grid";
+  document.getElementById("bracketGrid").innerHTML =
+    `<div class="br-grid-labels">${titles.map((t) => `<span>${t}</span>`).join("")}</div>
+<div class="br-grid-body">${html}</div>`;
 
-  /* Align column 5 connector with center of final match box */
   requestAnimationFrame(() => {
-    const cell = document.querySelector("#bracketGrid .bcell.conn-in");
+    const cell = document.querySelector(
+      "#bracketGrid .br-grid-body .bcell.conn-in",
+    );
     const finalBox = cell?.querySelector(".bk.final");
     if (cell && finalBox) {
       const cellRect = cell.getBoundingClientRect();
@@ -2315,6 +2337,67 @@ function renderBracket(context) {
     }
   });
 }
+
+function renderBracketFlex(context) {
+  const roundDefs = [
+    {
+      title: "16 avos de final · 28 jun–3 jul",
+      matchIds: [
+        73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88,
+      ],
+    },
+    { title: "Oitavos · 4–7 jul", matchIds: [89, 90, 91, 92, 93, 94, 95, 96] },
+    { title: "Quartos · 9–12 jul", matchIds: [97, 98, 99, 100] },
+    { title: "Meias-finais · 14–15 jul", matchIds: [101, 102] },
+  ];
+
+  let html = roundDefs
+    .map((round) => {
+      const matchesHTML = round.matchIds
+        .map(
+          (id) => `<div class="br-match">${knockoutBoxHTML(id, context)}</div>`,
+        )
+        .join("");
+      return `<div class="br-round"><div class="br-round-title">${round.title}</div><div class="br-matches">${matchesHTML}</div></div>`;
+    })
+    .join("");
+
+  const finalResult =
+    knockoutCache[FINAL_MATCH_ID] ||
+    computeKnockoutResult(FINAL_MATCH_ID, context);
+  const championHTML = finalResult.winner
+    ? `<div class="champ"><div class="lbl">Campeões do Mundo</div><div class="nm">🏆 ${TEAMS[finalResult.winner].flag} ${escapeHTML(TEAMS[finalResult.winner].name)}</div></div>`
+    : `<div class="champ empty"><div class="lbl">Campeões do Mundo</div><div class="nm">— por decidir —</div></div>`;
+
+  html += `<div class="br-round br-round-final"><div class="br-round-title">Final · 19 jul · NI/NJ</div><div class="br-matches">
+    <div class="br-match">${championHTML}</div>
+    <div class="br-match">${knockoutBoxHTML(FINAL_MATCH_ID, context, "final")}</div>
+    <div class="br-match">${knockoutBoxHTML(THIRD_PLACE_MATCH_ID, context, "bronze")}</div>
+  </div></div>`;
+
+  document.getElementById("bracketGrid").className = "bracket-flex";
+  document.getElementById("bracketGrid").innerHTML = html;
+}
+
+function renderBracket(context) {
+  if (window.innerWidth >= 1220) {
+    renderBracketGrid(context);
+  } else {
+    renderBracketFlex(context);
+  }
+}
+
+let renderBracketWidth = window.innerWidth;
+window.addEventListener("resize", () => {
+  const w = window.innerWidth;
+  if (
+    (w >= 1220 && renderBracketWidth < 1220) ||
+    (w < 1220 && renderBracketWidth >= 1220)
+  ) {
+    renderBracketWidth = w;
+    renderAll();
+  }
+});
 
 function renderAll() {
   const openDetails = Array.from(document.querySelectorAll("details.fp")).map(
