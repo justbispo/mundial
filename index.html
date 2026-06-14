@@ -79,38 +79,37 @@
           </button>
         </div>
 
-        <div class="controls">
-          <!-- Tab-specific options: only for the Quadro Geral tab -->
-          <nav class="section-nav" id="sectionNav">
-            <a href="#groups">Grupos</a>
-            <a href="#thirds">Melhores 3.ªˢ</a>
-            <a href="#bracket">Quadro</a>
-          </nav>
-          <!-- Shared options: available in both tabs -->
-          <div class="toolbar">
-            <span class="prog" id="prog"></span>
-            <button
-              type="button"
-              id="resetBtn"
-              title="Limpar todos os resultados e cartões inseridos"
-            >
-              Limpar tudo
-            </button>
-            <button
-              type="button"
-              id="clearResultsBtn"
-              title="Limpar apenas os resultados, mantém os cartões"
-            >
-              Limpar resultados
-            </button>
-            <button type="button" id="fetchBtn" class="fetch">
-              📥 Obter resultados
-            </button>
-            <button type="button" id="syncBtn" class="sync">
-              🔴 Manter sincronizado
-            </button>
-          </div>
-        </div>
+        <!-- Tab-specific options: only for the Quadro Geral tab. Stays sticky. -->
+        <nav class="section-nav" id="sectionNav">
+          <a href="#groups">Grupos</a>
+          <a href="#thirds">Melhores 3.ªˢ</a>
+          <a href="#bracket">Quadro</a>
+        </nav>
+      </div>
+
+      <!-- Shared options: available in both tabs. Not sticky — scrolls away. -->
+      <div class="toolbar">
+        <span class="prog" id="prog"></span>
+        <button
+          type="button"
+          id="resetBtn"
+          title="Limpar todos os resultados e cartões inseridos"
+        >
+          Limpar tudo
+        </button>
+        <button
+          type="button"
+          id="clearResultsBtn"
+          title="Limpar apenas os resultados, mantém os cartões"
+        >
+          Limpar resultados
+        </button>
+        <button type="button" id="fetchBtn" class="fetch">
+          📥 Obter resultados
+        </button>
+        <button type="button" id="syncBtn" class="sync">
+          🔴 Manter sincronizado
+        </button>
       </div>
 
       <div id="view-wallchart" class="view">

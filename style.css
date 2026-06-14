@@ -158,32 +158,32 @@ h1 .yr {
   box-shadow: 1px 1px 0 var(--shadow2);
 }
 
-/* ---------- sticky bar: tabs + controls travel together ---------- */
+/* ---------- sticky bar: tabs (+ wallchart section nav) stay pinned ---------- */
 .stickybar {
   position: sticky;
   top: 0;
   z-index: 50;
   background: var(--paper);
   border-bottom: 1.5px solid var(--ink);
-  margin-bottom: 30px;
+  margin-bottom: 18px;
 }
 
-/* ---------- controls (per-tab options + shared toolbar) ---------- */
-.controls {
-  padding: 9px 0;
+/* ---------- per-tab section nav (sticky) + shared toolbar (scrolls) ---------- */
+.section-nav {
   display: flex;
-  gap: 8px 16px;
-  justify-content: center;
+  gap: 6px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
+  padding: 0 0 9px;
 }
-.section-nav,
 .toolbar {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
+  margin: 14px 0 30px;
 }
 /* Section nav is tab-specific: hidden on the matches tab via [hidden]. */
 .section-nav[hidden] {
@@ -1187,7 +1187,7 @@ html[data-theme="dark"] .bk.final .bk-head {
   display: flex;
   gap: 8px;
   align-items: stretch;
-  padding: 12px 0 0;
+  padding: 12px 0 10px;
 }
 .tabs .tab {
   flex: 1 1 0;

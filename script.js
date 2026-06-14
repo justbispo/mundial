@@ -1381,8 +1381,8 @@ function setView(viewName) {
   const isMatches = viewName === "matches";
   document.getElementById("view-wallchart").hidden = isMatches;
   document.getElementById("view-matches").hidden = !isMatches;
-  /* The section nav (Grupos / Melhores 3.ªˢ / Quadro) belongs to the
-     wallchart tab only; the toolbar below it is shared by both tabs. */
+  /* The section nav (Grupos / Melhores 3.ªˢ / Quadro) is sticky and belongs to
+     the wallchart tab only; on the matches tab only the tabs stay pinned. */
   const sectionNav = document.getElementById("sectionNav");
   if (sectionNav) sectionNav.hidden = isMatches;
   document.querySelectorAll(".tab").forEach((tab) => {
