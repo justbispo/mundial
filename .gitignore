@@ -8,3 +8,6 @@
 !script.js
 !style.css
 !theme-init.js
+!sw.js
+!sw-register.js
+!manifest.webmanifest
