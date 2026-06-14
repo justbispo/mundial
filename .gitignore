@@ -1,0 +1,10 @@
+*
+!.gitignore
+!biome.json
+!data.js
+!icons
+!icons/*
+!index.html
+!script.js
+!style.css
+!theme-init.js
