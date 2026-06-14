@@ -1,1363 +1,59 @@
-/* Log all fetch() calls to console */
-const _origFetch = window.fetch;
-window.fetch = function (url, ...rest) {
-  console.log("[api]", typeof url === "string" ? url : url.url || url);
-  return _origFetch.call(this, url, ...rest);
-};
+/*
+ * script.js — logic, state, live-results API and rendering.
+ *
+ * Static tournament data (TEAMS, CHANNELS, STADIUMS, GROUP_FIXTURES,
+ * KNOCKOUT_MATCHES, the Annex C map, etc.) lives in data.js, which must be
+ * loaded first. Those top-level consts are visible here via the shared
+ * global scope of classic scripts.
+ */
 
-/* All 48 teams: ISO-style code -> { name, flag, fifaRank }
-	 fifaRank = position in the FIFA Men's World Ranking of 11 June 2026,
-	 used automatically as the final tie-breaker. */
-const TEAMS = {
-  MEX: { name: "México", flag: "🇲🇽", fifaRank: 14 },
-  KOR: { name: "Coreia do Sul", flag: "🇰🇷", fifaRank: 25 },
-  RSA: { name: "África do Sul", flag: "🇿🇦", fifaRank: 60 },
-  CZE: { name: "Chéquia", flag: "🇨🇿", fifaRank: 40 },
-  CAN: { name: "Canadá", flag: "🇨🇦", fifaRank: 30 },
-  SUI: { name: "Suíça", flag: "🇨🇭", fifaRank: 19 },
-  QAT: { name: "Catar", flag: "🇶🇦", fifaRank: 56 },
-  BIH: { name: "Bósnia e Herzegovina", flag: "🇧🇦", fifaRank: 64 },
-  BRA: { name: "Brasil", flag: "🇧🇷", fifaRank: 6 },
-  MAR: { name: "Marrocos", flag: "🇲🇦", fifaRank: 7 },
-  SCO: { name: "Escócia", flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", fifaRank: 42 },
-  HAI: { name: "Haiti", flag: "🇭🇹", fifaRank: 83 },
-  USA: { name: "Estados Unidos", flag: "🇺🇸", fifaRank: 17 },
-  PAR: { name: "Paraguai", flag: "🇵🇾", fifaRank: 41 },
-  AUS: { name: "Austrália", flag: "🇦🇺", fifaRank: 27 },
-  TUR: { name: "Turquia", flag: "🇹🇷", fifaRank: 22 },
-  GER: { name: "Alemanha", flag: "🇩🇪", fifaRank: 10 },
-  ECU: { name: "Equador", flag: "🇪🇨", fifaRank: 23 },
-  CIV: { name: "Costa do Marfim", flag: "🇨🇮", fifaRank: 33 },
-  CUW: { name: "Curaçao", flag: "🇨🇼", fifaRank: 82 },
-  NED: { name: "Países Baixos", flag: "🇳🇱", fifaRank: 8 },
-  JPN: { name: "Japão", flag: "🇯🇵", fifaRank: 18 },
-  TUN: { name: "Tunísia", flag: "🇹🇳", fifaRank: 45 },
-  SWE: { name: "Suécia", flag: "🇸🇪", fifaRank: 38 },
-  BEL: { name: "Bélgica", flag: "🇧🇪", fifaRank: 9 },
-  IRN: { name: "Irão", flag: "🇮🇷", fifaRank: 20 },
-  EGY: { name: "Egito", flag: "🇪🇬", fifaRank: 29 },
-  NZL: { name: "Nova Zelândia", flag: "🇳🇿", fifaRank: 85 },
-  ESP: { name: "Espanha", flag: "🇪🇸", fifaRank: 2 },
-  URU: { name: "Uruguai", flag: "🇺🇾", fifaRank: 16 },
-  KSA: { name: "Arábia Saudita", flag: "🇸🇦", fifaRank: 61 },
-  CPV: { name: "Cabo Verde", flag: "🇨🇻", fifaRank: 67 },
-  FRA: { name: "França", flag: "🇫🇷", fifaRank: 3 },
-  SEN: { name: "Senegal", flag: "🇸🇳", fifaRank: 15 },
-  NOR: { name: "Noruega", flag: "🇳🇴", fifaRank: 31 },
-  IRQ: { name: "Iraque", flag: "🇮🇶", fifaRank: 57 },
-  ARG: { name: "Argentina", flag: "🇦🇷", fifaRank: 1 },
-  AUT: { name: "Áustria", flag: "🇦🇹", fifaRank: 24 },
-  ALG: { name: "Argélia", flag: "🇩🇿", fifaRank: 28 },
-  JOR: { name: "Jordânia", flag: "🇯🇴", fifaRank: 63 },
-  POR: { name: "Portugal", flag: "🇵🇹", fifaRank: 5 },
-  COL: { name: "Colômbia", flag: "🇨🇴", fifaRank: 13 },
-  UZB: { name: "Uzbequistão", flag: "🇺🇿", fifaRank: 50 },
-  COD: { name: "RD Congo", flag: "🇨🇩", fifaRank: 46 },
-  ENG: { name: "Inglaterra", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", fifaRank: 4 },
-  CRO: { name: "Croácia", flag: "🇭🇷", fifaRank: 11 },
-  GHA: { name: "Gana", flag: "🇬🇭", fifaRank: 73 },
-  PAN: { name: "Panamá", flag: "🇵🇦", fifaRank: 34 },
-};
-
-const CHANNELS = {
-  s1: {
-    name: "Sport TV 1",
-    abbreviation: "STV1",
-    icon: "icons/sporttv1",
-    ext: "svg",
-  },
-  s5: {
-    name: "Sport TV 5",
-    abbreviation: "STV5",
-    icon: "icons/sporttv5",
-    ext: "svg",
-  },
-  s: {
-    name: "Sport TV (canal por anunciar)",
-    abbreviation: "STV",
-    icon: "icons/sporttv",
-    ext: "svg",
-  },
-  lm: {
-    name: "LiveModeTV (YouTube)",
-    abbreviation: "LM",
-    icon: "icons/livemodetv",
-    ext: "svg",
-  },
-  sic: { name: "SIC", abbreviation: "SIC", icon: "icons/sic", ext: "png" },
-  rtp: { name: "RTP 1", abbreviation: "RTP1", icon: "icons/rtp1", ext: "svg" },
-  tvi: { name: "TVI", abbreviation: "TVI", icon: "icons/tvi", ext: "png" },
-};
-
-/* Group-stage fixtures. Times are Portugal Continental (UTC+1). */
-const GROUP_LETTERS = "ABCDEFGHIJKL".split("");
-const GROUP_FIXTURES = {
-  A: [
-    {
-      home: "MEX",
-      away: "RSA",
-      date: "11/06",
-      time: "20:00",
-      channels: ["tvi", "s5", "lm"],
-    },
-    {
-      home: "KOR",
-      away: "CZE",
-      date: "12/06",
-      time: "03:00",
-      channels: ["s5"],
-    },
-    {
-      home: "CZE",
-      away: "RSA",
-      date: "18/06",
-      time: "17:00",
-      channels: ["s5"],
-    },
-    {
-      home: "MEX",
-      away: "KOR",
-      date: "19/06",
-      time: "02:00",
-      channels: ["s5"],
-    },
-    {
-      home: "CZE",
-      away: "MEX",
-      date: "25/06",
-      time: "02:00",
-      channels: ["s5"],
-    },
-    {
-      home: "RSA",
-      away: "KOR",
-      date: "25/06",
-      time: "02:00",
-      channels: ["s1"],
-    },
-  ],
-  B: [
-    {
-      home: "CAN",
-      away: "BIH",
-      date: "12/06",
-      time: "20:00",
-      channels: ["sic", "s1", "s5", "lm"],
-    },
-    {
-      home: "QAT",
-      away: "SUI",
-      date: "13/06",
-      time: "20:00",
-      channels: ["s5"],
-    },
-    {
-      home: "SUI",
-      away: "BIH",
-      date: "18/06",
-      time: "20:00",
-      channels: ["rtp", "s1", "s5", "lm"],
-    },
-    {
-      home: "CAN",
-      away: "QAT",
-      date: "18/06",
-      time: "23:00",
-      channels: ["s5"],
-    },
-    {
-      home: "SUI",
-      away: "CAN",
-      date: "24/06",
-      time: "20:00",
-      channels: ["s5"],
-    },
-    {
-      home: "BIH",
-      away: "QAT",
-      date: "24/06",
-      time: "20:00",
-      channels: ["s1"],
-    },
-  ],
-  C: [
-    {
-      home: "BRA",
-      away: "MAR",
-      date: "13/06",
-      time: "23:00",
-      channels: ["s1", "s5", "lm"],
-    },
-    {
-      home: "HAI",
-      away: "SCO",
-      date: "14/06",
-      time: "02:00",
-      channels: ["s1"],
-    },
-    {
-      home: "SCO",
-      away: "MAR",
-      date: "19/06",
-      time: "23:00",
-      channels: ["s5"],
-    },
-    {
-      home: "BRA",
-      away: "HAI",
-      date: "20/06",
-      time: "01:30",
-      channels: ["s1", "s5", "lm"],
-    },
-    {
-      home: "SCO",
-      away: "BRA",
-      date: "24/06",
-      time: "23:00",
-      channels: ["s1", "lm"],
-    },
-    {
-      home: "MAR",
-      away: "HAI",
-      date: "24/06",
-      time: "23:00",
-      channels: ["s5"],
-    },
-  ],
-  D: [
-    {
-      home: "USA",
-      away: "PAR",
-      date: "13/06",
-      time: "02:00",
-      channels: ["s5"],
-    },
-    {
-      home: "AUS",
-      away: "TUR",
-      date: "14/06",
-      time: "05:00",
-      channels: ["s5"],
-    },
-    {
-      home: "USA",
-      away: "AUS",
-      date: "19/06",
-      time: "20:00",
-      channels: ["s5"],
-    },
-    {
-      home: "TUR",
-      away: "PAR",
-      date: "20/06",
-      time: "04:00",
-      channels: ["s5"],
-    },
-    {
-      home: "TUR",
-      away: "USA",
-      date: "26/06",
-      time: "03:00",
-      channels: ["s5"],
-    },
-    {
-      home: "PAR",
-      away: "AUS",
-      date: "26/06",
-      time: "03:00",
-      channels: ["s1"],
-    },
-  ],
-  E: [
-    {
-      home: "GER",
-      away: "CUW",
-      date: "14/06",
-      time: "18:00",
-      channels: ["s1", "s5", "lm"],
-    },
-    {
-      home: "CIV",
-      away: "ECU",
-      date: "15/06",
-      time: "00:00",
-      channels: ["s5"],
-    },
-    {
-      home: "GER",
-      away: "CIV",
-      date: "20/06",
-      time: "21:00",
-      channels: ["tvi", "s1", "s5", "lm"],
-    },
-    {
-      home: "ECU",
-      away: "CUW",
-      date: "21/06",
-      time: "01:00",
-      channels: ["s5"],
-    },
-    {
-      home: "CUW",
-      away: "CIV",
-      date: "25/06",
-      time: "21:00",
-      channels: ["s1"],
-    },
-    {
-      home: "ECU",
-      away: "GER",
-      date: "25/06",
-      time: "21:00",
-      channels: ["sic", "s5", "lm"],
-    },
-  ],
-  F: [
-    {
-      home: "NED",
-      away: "JPN",
-      date: "14/06",
-      time: "21:00",
-      channels: ["s5"],
-    },
-    {
-      home: "SWE",
-      away: "TUN",
-      date: "15/06",
-      time: "03:00",
-      channels: ["s5"],
-    },
-    {
-      home: "NED",
-      away: "SWE",
-      date: "20/06",
-      time: "18:00",
-      channels: ["s5"],
-    },
-    {
-      home: "TUN",
-      away: "JPN",
-      date: "21/06",
-      time: "05:00",
-      channels: ["s5"],
-    },
-    {
-      home: "JPN",
-      away: "SWE",
-      date: "26/06",
-      time: "00:00",
-      channels: ["s5"],
-    },
-    {
-      home: "TUN",
-      away: "NED",
-      date: "26/06",
-      time: "00:00",
-      channels: ["s1"],
-    },
-  ],
-  G: [
-    {
-      home: "BEL",
-      away: "EGY",
-      date: "15/06",
-      time: "20:00",
-      channels: ["s5"],
-    },
-    {
-      home: "IRN",
-      away: "NZL",
-      date: "16/06",
-      time: "02:00",
-      channels: ["s5"],
-    },
-    {
-      home: "BEL",
-      away: "IRN",
-      date: "21/06",
-      time: "20:00",
-      channels: ["s5"],
-    },
-    {
-      home: "NZL",
-      away: "EGY",
-      date: "22/06",
-      time: "02:00",
-      channels: ["s5"],
-    },
-    {
-      home: "EGY",
-      away: "IRN",
-      date: "27/06",
-      time: "04:00",
-      channels: ["s1"],
-    },
-    {
-      home: "NZL",
-      away: "BEL",
-      date: "27/06",
-      time: "04:00",
-      channels: ["s5"],
-    },
-  ],
-  H: [
-    {
-      home: "ESP",
-      away: "CPV",
-      date: "15/06",
-      time: "17:00",
-      channels: ["s5", "lm"],
-    },
-    {
-      home: "KSA",
-      away: "URU",
-      date: "15/06",
-      time: "23:00",
-      channels: ["s5"],
-    },
-    {
-      home: "ESP",
-      away: "KSA",
-      date: "21/06",
-      time: "17:00",
-      channels: ["s1", "s5", "lm"],
-    },
-    {
-      home: "URU",
-      away: "CPV",
-      date: "21/06",
-      time: "23:00",
-      channels: ["s5"],
-    },
-    {
-      home: "CPV",
-      away: "KSA",
-      date: "27/06",
-      time: "01:00",
-      channels: ["s1"],
-    },
-    {
-      home: "URU",
-      away: "ESP",
-      date: "27/06",
-      time: "01:00",
-      channels: ["s5"],
-    },
-  ],
-  I: [
-    {
-      home: "FRA",
-      away: "SEN",
-      date: "16/06",
-      time: "20:00",
-      channels: ["rtp", "s1", "s5", "lm"],
-    },
-    {
-      home: "IRQ",
-      away: "NOR",
-      date: "16/06",
-      time: "23:00",
-      channels: ["s5"],
-    },
-    {
-      home: "FRA",
-      away: "IRQ",
-      date: "22/06",
-      time: "22:00",
-      channels: ["s5"],
-    },
-    {
-      home: "NOR",
-      away: "SEN",
-      date: "23/06",
-      time: "01:00",
-      channels: ["s5"],
-    },
-    {
-      home: "NOR",
-      away: "FRA",
-      date: "26/06",
-      time: "20:00",
-      channels: ["tvi", "s5", "lm"],
-    },
-    {
-      home: "SEN",
-      away: "IRQ",
-      date: "26/06",
-      time: "20:00",
-      channels: ["s1"],
-    },
-  ],
-  J: [
-    {
-      home: "ARG",
-      away: "ALG",
-      date: "17/06",
-      time: "02:00",
-      channels: ["s5"],
-    },
-    {
-      home: "AUT",
-      away: "JOR",
-      date: "17/06",
-      time: "05:00",
-      channels: ["s5"],
-    },
-    {
-      home: "ARG",
-      away: "AUT",
-      date: "22/06",
-      time: "18:00",
-      channels: ["s1", "s5", "lm"],
-    },
-    {
-      home: "JOR",
-      away: "ALG",
-      date: "23/06",
-      time: "04:00",
-      channels: ["s5"],
-    },
-    {
-      home: "ALG",
-      away: "AUT",
-      date: "28/06",
-      time: "03:00",
-      channels: ["s1"],
-    },
-    {
-      home: "JOR",
-      away: "ARG",
-      date: "28/06",
-      time: "03:00",
-      channels: ["s5"],
-    },
-  ],
-  K: [
-    {
-      home: "POR",
-      away: "COD",
-      date: "17/06",
-      time: "18:00",
-      channels: ["sic", "s1", "s5", "lm"],
-    },
-    {
-      home: "UZB",
-      away: "COL",
-      date: "18/06",
-      time: "03:00",
-      channels: ["s5"],
-    },
-    {
-      home: "POR",
-      away: "UZB",
-      date: "23/06",
-      time: "18:00",
-      channels: ["tvi", "s1", "s5", "lm"],
-    },
-    {
-      home: "COL",
-      away: "COD",
-      date: "24/06",
-      time: "03:00",
-      channels: ["s5"],
-    },
-    {
-      home: "COL",
-      away: "POR",
-      date: "28/06",
-      time: "00:30",
-      channels: ["rtp", "s5", "lm"],
-    },
-    {
-      home: "COD",
-      away: "UZB",
-      date: "28/06",
-      time: "00:30",
-      channels: ["s1"],
-    },
-  ],
-  L: [
-    {
-      home: "ENG",
-      away: "CRO",
-      date: "17/06",
-      time: "21:00",
-      channels: ["s5"],
-    },
-    {
-      home: "GHA",
-      away: "PAN",
-      date: "18/06",
-      time: "00:00",
-      channels: ["s5"],
-    },
-    {
-      home: "ENG",
-      away: "GHA",
-      date: "23/06",
-      time: "21:00",
-      channels: ["s5"],
-    },
-    {
-      home: "PAN",
-      away: "CRO",
-      date: "24/06",
-      time: "00:00",
-      channels: ["s5"],
-    },
-    {
-      home: "PAN",
-      away: "ENG",
-      date: "27/06",
-      time: "22:00",
-      channels: ["s5"],
-    },
-    {
-      home: "CRO",
-      away: "GHA",
-      date: "27/06",
-      time: "22:00",
-      channels: ["s1"],
-    },
-  ],
-};
-
-/* FIFA Annex C: all 495 combinations of the 8 groups that supply the
-	 qualified third-placed teams. Key = those 8 group letters, sorted.
-	 Value = which group's third goes to each slot, in the order
-	 [Match 79, 85, 81, 74, 82, 77, 87, 80] (i.e. vs winners of A,B,D,E,G,I,K,L). */
-const THIRD_PLACE_MATCH_ORDER = [79, 85, 81, 74, 82, 77, 87, 80];
-const THIRD_PLACE_BRACKET_MAP = {
-  EFGHIJKL: "EJIFHGLK",
-  DFGHIJKL: "HGIDJFLK",
-  DEGHIJKL: "EJIDHGLK",
-  DEFHIJKL: "EJIDHFLK",
-  DEFGIJKL: "EGIDJFLK",
-  DEFGHJKL: "EGJDHFLK",
-  DEFGHIKL: "EGIDHFLK",
-  DEFGHIJL: "EGJDHFLI",
-  DEFGHIJK: "EGJDHFIK",
-  CFGHIJKL: "HGICJFLK",
-  CEGHIJKL: "EJICHGLK",
-  CEFHIJKL: "EJICHFLK",
-  CEFGIJKL: "EGICJFLK",
-  CEFGHJKL: "EGJCHFLK",
-  CEFGHIKL: "EGICHFLK",
-  CEFGHIJL: "EGJCHFLI",
-  CEFGHIJK: "EGJCHFIK",
-  CDGHIJKL: "HGICJDLK",
-  CDFHIJKL: "CJIDHFLK",
-  CDFGIJKL: "CGIDJFLK",
-  CDFGHJKL: "CGJDHFLK",
-  CDFGHIKL: "CGIDHFLK",
-  CDFGHIJL: "CGJDHFLI",
-  CDFGHIJK: "CGJDHFIK",
-  CDEHIJKL: "EJICHDLK",
-  CDEGIJKL: "EGICJDLK",
-  CDEGHJKL: "EGJCHDLK",
-  CDEGHIKL: "EGICHDLK",
-  CDEGHIJL: "EGJCHDLI",
-  CDEGHIJK: "EGJCHDIK",
-  CDEFIJKL: "CJEDIFLK",
-  CDEFHJKL: "CJEDHFLK",
-  CDEFHIKL: "CEIDHFLK",
-  CDEFHIJL: "CJEDHFLI",
-  CDEFHIJK: "CJEDHFIK",
-  CDEFGJKL: "CGEDJFLK",
-  CDEFGIKL: "CGEDIFLK",
-  CDEFGIJL: "CGEDJFLI",
-  CDEFGIJK: "CGEDJFIK",
-  CDEFGHKL: "CGEDHFLK",
-  CDEFGHJL: "CGJDHFLE",
-  CDEFGHJK: "CGJDHFEK",
-  CDEFGHIL: "CGEDHFLI",
-  CDEFGHIK: "CGEDHFIK",
-  CDEFGHIJ: "CGJDHFEI",
-  BFGHIJKL: "HJBFIGLK",
-  BEGHIJKL: "EJIBHGLK",
-  BEFHIJKL: "EJBFIHLK",
-  BEFGIJKL: "EJBFIGLK",
-  BEFGHJKL: "EJBFHGLK",
-  BEFGHIKL: "EGBFIHLK",
-  BEFGHIJL: "EJBFHGLI",
-  BEFGHIJK: "EJBFHGIK",
-  BDGHIJKL: "HJBDIGLK",
-  BDFHIJKL: "HJBDIFLK",
-  BDFGIJKL: "IGBDJFLK",
-  BDFGHJKL: "HGBDJFLK",
-  BDFGHIKL: "HGBDIFLK",
-  BDFGHIJL: "HGBDJFLI",
-  BDFGHIJK: "HGBDJFIK",
-  BDEHIJKL: "EJBDIHLK",
-  BDEGIJKL: "EJBDIGLK",
-  BDEGHJKL: "EJBDHGLK",
-  BDEGHIKL: "EGBDIHLK",
-  BDEGHIJL: "EJBDHGLI",
-  BDEGHIJK: "EJBDHGIK",
-  BDEFIJKL: "EJBDIFLK",
-  BDEFHJKL: "EJBDHFLK",
-  BDEFHIKL: "EIBDHFLK",
-  BDEFHIJL: "EJBDHFLI",
-  BDEFHIJK: "EJBDHFIK",
-  BDEFGJKL: "EGBDJFLK",
-  BDEFGIKL: "EGBDIFLK",
-  BDEFGIJL: "EGBDJFLI",
-  BDEFGIJK: "EGBDJFIK",
-  BDEFGHKL: "EGBDHFLK",
-  BDEFGHJL: "HGBDJFLE",
-  BDEFGHJK: "HGBDJFEK",
-  BDEFGHIL: "EGBDHFLI",
-  BDEFGHIK: "EGBDHFIK",
-  BDEFGHIJ: "HGBDJFEI",
-  BCGHIJKL: "HJBCIGLK",
-  BCFHIJKL: "HJBCIFLK",
-  BCFGIJKL: "IGBCJFLK",
-  BCFGHJKL: "HGBCJFLK",
-  BCFGHIKL: "HGBCIFLK",
-  BCFGHIJL: "HGBCJFLI",
-  BCFGHIJK: "HGBCJFIK",
-  BCEHIJKL: "EJBCIHLK",
-  BCEGIJKL: "EJBCIGLK",
-  BCEGHJKL: "EJBCHGLK",
-  BCEGHIKL: "EGBCIHLK",
-  BCEGHIJL: "EJBCHGLI",
-  BCEGHIJK: "EJBCHGIK",
-  BCEFIJKL: "EJBCIFLK",
-  BCEFHJKL: "EJBCHFLK",
-  BCEFHIKL: "EIBCHFLK",
-  BCEFHIJL: "EJBCHFLI",
-  BCEFHIJK: "EJBCHFIK",
-  BCEFGJKL: "EGBCJFLK",
-  BCEFGIKL: "EGBCIFLK",
-  BCEFGIJL: "EGBCJFLI",
-  BCEFGIJK: "EGBCJFIK",
-  BCEFGHKL: "EGBCHFLK",
-  BCEFGHJL: "HGBCJFLE",
-  BCEFGHJK: "HGBCJFEK",
-  BCEFGHIL: "EGBCHFLI",
-  BCEFGHIK: "EGBCHFIK",
-  BCEFGHIJ: "HGBCJFEI",
-  BCDHIJKL: "HJBCIDLK",
-  BCDGIJKL: "IGBCJDLK",
-  BCDGHJKL: "HGBCJDLK",
-  BCDGHIKL: "HGBCIDLK",
-  BCDGHIJL: "HGBCJDLI",
-  BCDGHIJK: "HGBCJDIK",
-  BCDFIJKL: "CJBDIFLK",
-  BCDFHJKL: "CJBDHFLK",
-  BCDFHIKL: "CIBDHFLK",
-  BCDFHIJL: "CJBDHFLI",
-  BCDFHIJK: "CJBDHFIK",
-  BCDFGJKL: "CGBDJFLK",
-  BCDFGIKL: "CGBDIFLK",
-  BCDFGIJL: "CGBDJFLI",
-  BCDFGIJK: "CGBDJFIK",
-  BCDFGHKL: "CGBDHFLK",
-  BCDFGHJL: "CGBDHFLJ",
-  BCDFGHJK: "HGBCJFDK",
-  BCDFGHIL: "CGBDHFLI",
-  BCDFGHIK: "CGBDHFIK",
-  BCDFGHIJ: "HGBCJFDI",
-  BCDEIJKL: "EJBCIDLK",
-  BCDEHJKL: "EJBCHDLK",
-  BCDEHIKL: "EIBCHDLK",
-  BCDEHIJL: "EJBCHDLI",
-  BCDEHIJK: "EJBCHDIK",
-  BCDEGJKL: "EGBCJDLK",
-  BCDEGIKL: "EGBCIDLK",
-  BCDEGIJL: "EGBCJDLI",
-  BCDEGIJK: "EGBCJDIK",
-  BCDEGHKL: "EGBCHDLK",
-  BCDEGHJL: "HGBCJDLE",
-  BCDEGHJK: "HGBCJDEK",
-  BCDEGHIL: "EGBCHDLI",
-  BCDEGHIK: "EGBCHDIK",
-  BCDEGHIJ: "HGBCJDEI",
-  BCDEFJKL: "CJBDEFLK",
-  BCDEFIKL: "CEBDIFLK",
-  BCDEFIJL: "CJBDEFLI",
-  BCDEFIJK: "CJBDEFIK",
-  BCDEFHKL: "CEBDHFLK",
-  BCDEFHJL: "CJBDHFLE",
-  BCDEFHJK: "CJBDHFEK",
-  BCDEFHIL: "CEBDHFLI",
-  BCDEFHIK: "CEBDHFIK",
-  BCDEFHIJ: "CJBDHFEI",
-  BCDEFGKL: "CGBDEFLK",
-  BCDEFGJL: "CGBDJFLE",
-  BCDEFGJK: "CGBDJFEK",
-  BCDEFGIL: "CGBDEFLI",
-  BCDEFGIK: "CGBDEFIK",
-  BCDEFGIJ: "CGBDJFEI",
-  BCDEFGHL: "CGBDHFLE",
-  BCDEFGHK: "CGBDHFEK",
-  BCDEFGHJ: "HGBCJFDE",
-  BCDEFGHI: "CGBDHFEI",
-  AFGHIJKL: "HJIFAGLK",
-  AEGHIJKL: "EJIAHGLK",
-  AEFHIJKL: "EJIFAHLK",
-  AEFGIJKL: "EJIFAGLK",
-  AEFGHJKL: "EGJFAHLK",
-  AEFGHIKL: "EGIFAHLK",
-  AEFGHIJL: "EGJFAHLI",
-  AEFGHIJK: "EGJFAHIK",
-  ADGHIJKL: "HJIDAGLK",
-  ADFHIJKL: "HJIDAFLK",
-  ADFGIJKL: "IGJDAFLK",
-  ADFGHJKL: "HGJDAFLK",
-  ADFGHIKL: "HGIDAFLK",
-  ADFGHIJL: "HGJDAFLI",
-  ADFGHIJK: "HGJDAFIK",
-  ADEHIJKL: "EJIDAHLK",
-  ADEGIJKL: "EJIDAGLK",
-  ADEGHJKL: "EGJDAHLK",
-  ADEGHIKL: "EGIDAHLK",
-  ADEGHIJL: "EGJDAHLI",
-  ADEGHIJK: "EGJDAHIK",
-  ADEFIJKL: "EJIDAFLK",
-  ADEFHJKL: "HJEDAFLK",
-  ADEFHIKL: "HEIDAFLK",
-  ADEFHIJL: "HJEDAFLI",
-  ADEFHIJK: "HJEDAFIK",
-  ADEFGJKL: "EGJDAFLK",
-  ADEFGIKL: "EGIDAFLK",
-  ADEFGIJL: "EGJDAFLI",
-  ADEFGIJK: "EGJDAFIK",
-  ADEFGHKL: "HGEDAFLK",
-  ADEFGHJL: "HGJDAFLE",
-  ADEFGHJK: "HGJDAFEK",
-  ADEFGHIL: "HGEDAFLI",
-  ADEFGHIK: "HGEDAFIK",
-  ADEFGHIJ: "HGJDAFEI",
-  ACGHIJKL: "HJICAGLK",
-  ACFHIJKL: "HJICAFLK",
-  ACFGIJKL: "IGJCAFLK",
-  ACFGHJKL: "HGJCAFLK",
-  ACFGHIKL: "HGICAFLK",
-  ACFGHIJL: "HGJCAFLI",
-  ACFGHIJK: "HGJCAFIK",
-  ACEHIJKL: "EJICAHLK",
-  ACEGIJKL: "EJICAGLK",
-  ACEGHJKL: "EGJCAHLK",
-  ACEGHIKL: "EGICAHLK",
-  ACEGHIJL: "EGJCAHLI",
-  ACEGHIJK: "EGJCAHIK",
-  ACEFIJKL: "EJICAFLK",
-  ACEFHJKL: "HJECAFLK",
-  ACEFHIKL: "HEICAFLK",
-  ACEFHIJL: "HJECAFLI",
-  ACEFHIJK: "HJECAFIK",
-  ACEFGJKL: "EGJCAFLK",
-  ACEFGIKL: "EGICAFLK",
-  ACEFGIJL: "EGJCAFLI",
-  ACEFGIJK: "EGJCAFIK",
-  ACEFGHKL: "HGECAFLK",
-  ACEFGHJL: "HGJCAFLE",
-  ACEFGHJK: "HGJCAFEK",
-  ACEFGHIL: "HGECAFLI",
-  ACEFGHIK: "HGECAFIK",
-  ACEFGHIJ: "HGJCAFEI",
-  ACDHIJKL: "HJICADLK",
-  ACDGIJKL: "IGJCADLK",
-  ACDGHJKL: "HGJCADLK",
-  ACDGHIKL: "HGICADLK",
-  ACDGHIJL: "HGJCADLI",
-  ACDGHIJK: "HGJCADIK",
-  ACDFIJKL: "CJIDAFLK",
-  ACDFHJKL: "HJFCADLK",
-  ACDFHIKL: "HFICADLK",
-  ACDFHIJL: "HJFCADLI",
-  ACDFHIJK: "HJFCADIK",
-  ACDFGJKL: "CGJDAFLK",
-  ACDFGIKL: "CGIDAFLK",
-  ACDFGIJL: "CGJDAFLI",
-  ACDFGIJK: "CGJDAFIK",
-  ACDFGHKL: "HGFCADLK",
-  ACDFGHJL: "CGJDAFLH",
-  ACDFGHJK: "HGJCAFDK",
-  ACDFGHIL: "HGFCADLI",
-  ACDFGHIK: "HGFCADIK",
-  ACDFGHIJ: "HGJCAFDI",
-  ACDEIJKL: "EJICADLK",
-  ACDEHJKL: "HJECADLK",
-  ACDEHIKL: "HEICADLK",
-  ACDEHIJL: "HJECADLI",
-  ACDEHIJK: "HJECADIK",
-  ACDEGJKL: "EGJCADLK",
-  ACDEGIKL: "EGICADLK",
-  ACDEGIJL: "EGJCADLI",
-  ACDEGIJK: "EGJCADIK",
-  ACDEGHKL: "HGECADLK",
-  ACDEGHJL: "HGJCADLE",
-  ACDEGHJK: "HGJCADEK",
-  ACDEGHIL: "HGECADLI",
-  ACDEGHIK: "HGECADIK",
-  ACDEGHIJ: "HGJCADEI",
-  ACDEFJKL: "CJEDAFLK",
-  ACDEFIKL: "CEIDAFLK",
-  ACDEFIJL: "CJEDAFLI",
-  ACDEFIJK: "CJEDAFIK",
-  ACDEFHKL: "HEFCADLK",
-  ACDEFHJL: "HJFCADLE",
-  ACDEFHJK: "HJECAFDK",
-  ACDEFHIL: "HEFCADLI",
-  ACDEFHIK: "HEFCADIK",
-  ACDEFHIJ: "HJECAFDI",
-  ACDEFGKL: "CGEDAFLK",
-  ACDEFGJL: "CGJDAFLE",
-  ACDEFGJK: "CGJDAFEK",
-  ACDEFGIL: "CGEDAFLI",
-  ACDEFGIK: "CGEDAFIK",
-  ACDEFGIJ: "CGJDAFEI",
-  ACDEFGHL: "HGFCADLE",
-  ACDEFGHK: "HGECAFDK",
-  ACDEFGHJ: "HGJCAFDE",
-  ACDEFGHI: "HGECAFDI",
-  ABGHIJKL: "HJBAIGLK",
-  ABFHIJKL: "HJBAIFLK",
-  ABFGIJKL: "IJBFAGLK",
-  ABFGHJKL: "HJBFAGLK",
-  ABFGHIKL: "HGBAIFLK",
-  ABFGHIJL: "HJBFAGLI",
-  ABFGHIJK: "HJBFAGIK",
-  ABEHIJKL: "EJBAIHLK",
-  ABEGIJKL: "EJBAIGLK",
-  ABEGHJKL: "EJBAHGLK",
-  ABEGHIKL: "EGBAIHLK",
-  ABEGHIJL: "EJBAHGLI",
-  ABEGHIJK: "EJBAHGIK",
-  ABEFIJKL: "EJBAIFLK",
-  ABEFHJKL: "EJBFAHLK",
-  ABEFHIKL: "EIBFAHLK",
-  ABEFHIJL: "EJBFAHLI",
-  ABEFHIJK: "EJBFAHIK",
-  ABEFGJKL: "EJBFAGLK",
-  ABEFGIKL: "EGBAIFLK",
-  ABEFGIJL: "EJBFAGLI",
-  ABEFGIJK: "EJBFAGIK",
-  ABEFGHKL: "EGBFAHLK",
-  ABEFGHJL: "HJBFAGLE",
-  ABEFGHJK: "HJBFAGEK",
-  ABEFGHIL: "EGBFAHLI",
-  ABEFGHIK: "EGBFAHIK",
-  ABEFGHIJ: "HJBFAGEI",
-  ABDHIJKL: "IJBDAHLK",
-  ABDGIJKL: "IJBDAGLK",
-  ABDGHJKL: "HJBDAGLK",
-  ABDGHIKL: "IGBDAHLK",
-  ABDGHIJL: "HJBDAGLI",
-  ABDGHIJK: "HJBDAGIK",
-  ABDFIJKL: "IJBDAFLK",
-  ABDFHJKL: "HJBDAFLK",
-  ABDFHIKL: "HIBDAFLK",
-  ABDFHIJL: "HJBDAFLI",
-  ABDFHIJK: "HJBDAFIK",
-  ABDFGJKL: "FJBDAGLK",
-  ABDFGIKL: "IGBDAFLK",
-  ABDFGIJL: "FJBDAGLI",
-  ABDFGIJK: "FJBDAGIK",
-  ABDFGHKL: "HGBDAFLK",
-  ABDFGHJL: "HGBDAFLJ",
-  ABDFGHJK: "HGBDAFJK",
-  ABDFGHIL: "HGBDAFLI",
-  ABDFGHIK: "HGBDAFIK",
-  ABDFGHIJ: "HGBDAFIJ",
-  ABDEIJKL: "EJBAIDLK",
-  ABDEHJKL: "EJBDAHLK",
-  ABDEHIKL: "EIBDAHLK",
-  ABDEHIJL: "EJBDAHLI",
-  ABDEHIJK: "EJBDAHIK",
-  ABDEGJKL: "EJBDAGLK",
-  ABDEGIKL: "EGBAIDLK",
-  ABDEGIJL: "EJBDAGLI",
-  ABDEGIJK: "EJBDAGIK",
-  ABDEGHKL: "EGBDAHLK",
-  ABDEGHJL: "HJBDAGLE",
-  ABDEGHJK: "HJBDAGEK",
-  ABDEGHIL: "EGBDAHLI",
-  ABDEGHIK: "EGBDAHIK",
-  ABDEGHIJ: "HJBDAGEI",
-  ABDEFJKL: "EJBDAFLK",
-  ABDEFIKL: "EIBDAFLK",
-  ABDEFIJL: "EJBDAFLI",
-  ABDEFIJK: "EJBDAFIK",
-  ABDEFHKL: "HEBDAFLK",
-  ABDEFHJL: "HJBDAFLE",
-  ABDEFHJK: "HJBDAFEK",
-  ABDEFHIL: "HEBDAFLI",
-  ABDEFHIK: "HEBDAFIK",
-  ABDEFHIJ: "HJBDAFEI",
-  ABDEFGKL: "EGBDAFLK",
-  ABDEFGJL: "EGBDAFLJ",
-  ABDEFGJK: "EGBDAFJK",
-  ABDEFGIL: "EGBDAFLI",
-  ABDEFGIK: "EGBDAFIK",
-  ABDEFGIJ: "EGBDAFIJ",
-  ABDEFGHL: "HGBDAFLE",
-  ABDEFGHK: "HGBDAFEK",
-  ABDEFGHJ: "HGBDAFEJ",
-  ABDEFGHI: "HGBDAFEI",
-  ABCHIJKL: "IJBCAHLK",
-  ABCGIJKL: "IJBCAGLK",
-  ABCGHJKL: "HJBCAGLK",
-  ABCGHIKL: "IGBCAHLK",
-  ABCGHIJL: "HJBCAGLI",
-  ABCGHIJK: "HJBCAGIK",
-  ABCFIJKL: "IJBCAFLK",
-  ABCFHJKL: "HJBCAFLK",
-  ABCFHIKL: "HIBCAFLK",
-  ABCFHIJL: "HJBCAFLI",
-  ABCFHIJK: "HJBCAFIK",
-  ABCFGJKL: "CJBFAGLK",
-  ABCFGIKL: "IGBCAFLK",
-  ABCFGIJL: "CJBFAGLI",
-  ABCFGIJK: "CJBFAGIK",
-  ABCFGHKL: "HGBCAFLK",
-  ABCFGHJL: "HGBCAFLJ",
-  ABCFGHJK: "HGBCAFJK",
-  ABCFGHIL: "HGBCAFLI",
-  ABCFGHIK: "HGBCAFIK",
-  ABCFGHIJ: "HGBCAFIJ",
-  ABCEIJKL: "EJBAICLK",
-  ABCEHJKL: "EJBCAHLK",
-  ABCEHIKL: "EIBCAHLK",
-  ABCEHIJL: "EJBCAHLI",
-  ABCEHIJK: "EJBCAHIK",
-  ABCEGJKL: "EJBCAGLK",
-  ABCEGIKL: "EGBAICLK",
-  ABCEGIJL: "EJBCAGLI",
-  ABCEGIJK: "EJBCAGIK",
-  ABCEGHKL: "EGBCAHLK",
-  ABCEGHJL: "HJBCAGLE",
-  ABCEGHJK: "HJBCAGEK",
-  ABCEGHIL: "EGBCAHLI",
-  ABCEGHIK: "EGBCAHIK",
-  ABCEGHIJ: "HJBCAGEI",
-  ABCEFJKL: "EJBCAFLK",
-  ABCEFIKL: "EIBCAFLK",
-  ABCEFIJL: "EJBCAFLI",
-  ABCEFIJK: "EJBCAFIK",
-  ABCEFHKL: "HEBCAFLK",
-  ABCEFHJL: "HJBCAFLE",
-  ABCEFHJK: "HJBCAFEK",
-  ABCEFHIL: "HEBCAFLI",
-  ABCEFHIK: "HEBCAFIK",
-  ABCEFHIJ: "HJBCAFEI",
-  ABCEFGKL: "EGBCAFLK",
-  ABCEFGJL: "EGBCAFLJ",
-  ABCEFGJK: "EGBCAFJK",
-  ABCEFGIL: "EGBCAFLI",
-  ABCEFGIK: "EGBCAFIK",
-  ABCEFGIJ: "EGBCAFIJ",
-  ABCEFGHL: "HGBCAFLE",
-  ABCEFGHK: "HGBCAFEK",
-  ABCEFGHJ: "HGBCAFEJ",
-  ABCEFGHI: "HGBCAFEI",
-  ABCDIJKL: "IJBCADLK",
-  ABCDHJKL: "HJBCADLK",
-  ABCDHIKL: "HIBCADLK",
-  ABCDHIJL: "HJBCADLI",
-  ABCDHIJK: "HJBCADIK",
-  ABCDGJKL: "CJBDAGLK",
-  ABCDGIKL: "IGBCADLK",
-  ABCDGIJL: "CJBDAGLI",
-  ABCDGIJK: "CJBDAGIK",
-  ABCDGHKL: "HGBCADLK",
-  ABCDGHJL: "HGBCADLJ",
-  ABCDGHJK: "HGBCADJK",
-  ABCDGHIL: "HGBCADLI",
-  ABCDGHIK: "HGBCADIK",
-  ABCDGHIJ: "HGBCADIJ",
-  ABCDFJKL: "CJBDAFLK",
-  ABCDFIKL: "CIBDAFLK",
-  ABCDFIJL: "CJBDAFLI",
-  ABCDFIJK: "CJBDAFIK",
-  ABCDFHKL: "HFBCADLK",
-  ABCDFHJL: "CJBDAFLH",
-  ABCDFHJK: "HJBCAFDK",
-  ABCDFHIL: "HFBCADLI",
-  ABCDFHIK: "HFBCADIK",
-  ABCDFHIJ: "HJBCAFDI",
-  ABCDFGKL: "CGBDAFLK",
-  ABCDFGJL: "CGBDAFLJ",
-  ABCDFGJK: "CGBDAFJK",
-  ABCDFGIL: "CGBDAFLI",
-  ABCDFGIK: "CGBDAFIK",
-  ABCDFGIJ: "CGBDAFIJ",
-  ABCDFGHL: "CGBDAFLH",
-  ABCDFGHK: "HGBCAFDK",
-  ABCDFGHJ: "HGBCAFDJ",
-  ABCDFGHI: "HGBCAFDI",
-  ABCDEJKL: "EJBCADLK",
-  ABCDEIKL: "EIBCADLK",
-  ABCDEIJL: "EJBCADLI",
-  ABCDEIJK: "EJBCADIK",
-  ABCDEHKL: "HEBCADLK",
-  ABCDEHJL: "HJBCADLE",
-  ABCDEHJK: "HJBCADEK",
-  ABCDEHIL: "HEBCADLI",
-  ABCDEHIK: "HEBCADIK",
-  ABCDEHIJ: "HJBCADEI",
-  ABCDEGKL: "EGBCADLK",
-  ABCDEGJL: "EGBCADLJ",
-  ABCDEGJK: "EGBCADJK",
-  ABCDEGIL: "EGBCADLI",
-  ABCDEGIK: "EGBCADIK",
-  ABCDEGIJ: "EGBCADIJ",
-  ABCDEGHL: "HGBCADLE",
-  ABCDEGHK: "HGBCADEK",
-  ABCDEGHJ: "HGBCADEJ",
-  ABCDEGHI: "HGBCADEI",
-  ABCDEFKL: "CEBDAFLK",
-  ABCDEFJL: "CJBDAFLE",
-  ABCDEFJK: "CJBDAFEK",
-  ABCDEFIL: "CEBDAFLI",
-  ABCDEFIK: "CEBDAFIK",
-  ABCDEFIJ: "CJBDAFEI",
-  ABCDEFHL: "HFBCADLE",
-  ABCDEFHK: "HEBCAFDK",
-  ABCDEFHJ: "HJBCAFDE",
-  ABCDEFHI: "HEBCAFDI",
-  ABCDEFGL: "CGBDAFLE",
-  ABCDEFGK: "CGBDAFEK",
-  ABCDEFGJ: "CGBDAFEJ",
-  ABCDEFGI: "CGBDAFEI",
-  ABCDEFGH: "HGBCAFDE",
-};
-
-/* Knockout matches. Slot tokens:
-	 "1A"/"2A" = winner / runner-up of group A
-	 "T79"     = best third-placed team allocated to match 79 (per Annex C)
-	 "W73"/"L101" = winner / loser of an earlier match
-	 "when" = date · Portugal time (UTC+1) · venue. */
-const KNOCKOUT_MATCHES = [
-  {
-    id: 73,
-    slots: ["2A", "2B"],
-    when: "28/06 · 20:00 · Los Angeles",
-    channels: ["s"],
-  },
-  {
-    id: 74,
-    slots: ["1E", "T74"],
-    when: "29/06 · 21:30 · Boston",
-    thirdFromGroups: "A/B/C/D/F",
-    channels: ["s"],
-  },
-  {
-    id: 75,
-    slots: ["1F", "2C"],
-    when: "30/06 · 02:00 · Monterrei",
-    channels: ["s"],
-  },
-  {
-    id: 76,
-    slots: ["1C", "2F"],
-    when: "29/06 · 18:00 · Houston",
-    channels: ["s"],
-  },
-  {
-    id: 77,
-    slots: ["1I", "T77"],
-    when: "30/06 · 22:00 · Nova Iorque",
-    thirdFromGroups: "C/D/F/G/H",
-    channels: ["s"],
-  },
-  {
-    id: 78,
-    slots: ["2E", "2I"],
-    when: "30/06 · 18:00 · Dallas",
-    channels: ["s"],
-  },
-  {
-    id: 79,
-    slots: ["1A", "T79"],
-    when: "01/07 · 02:00 · Cidade do México",
-    thirdFromGroups: "C/E/F/H/I",
-    channels: ["s"],
-  },
-  {
-    id: 80,
-    slots: ["1L", "T80"],
-    when: "01/07 · 17:00 · Atlanta",
-    thirdFromGroups: "E/H/I/J/K",
-    channels: ["s"],
-  },
-  {
-    id: 81,
-    slots: ["1D", "T81"],
-    when: "02/07 · 01:00 · Baía de SF",
-    thirdFromGroups: "B/E/F/I/J",
-    channels: ["s"],
-  },
-  {
-    id: 82,
-    slots: ["1G", "T82"],
-    when: "01/07 · 21:00 · Seattle",
-    thirdFromGroups: "A/E/H/I/J",
-    channels: ["s"],
-  },
-  {
-    id: 83,
-    slots: ["2K", "2L"],
-    when: "03/07 · 00:00 · Toronto",
-    channels: ["s"],
-  },
-  {
-    id: 84,
-    slots: ["1H", "2J"],
-    when: "02/07 · 20:00 · Los Angeles",
-    channels: ["s"],
-  },
-  {
-    id: 85,
-    slots: ["1B", "T85"],
-    when: "03/07 · 04:00 · Vancouver",
-    thirdFromGroups: "E/F/G/I/J",
-    channels: ["s"],
-  },
-  {
-    id: 86,
-    slots: ["1J", "2H"],
-    when: "03/07 · 23:00 · Miami",
-    channels: ["s"],
-  },
-  {
-    id: 87,
-    slots: ["1K", "T87"],
-    when: "04/07 · 02:30 · Kansas City",
-    thirdFromGroups: "D/E/I/J/L",
-    channels: ["s"],
-  },
-  {
-    id: 88,
-    slots: ["2D", "2G"],
-    when: "03/07 · 19:00 · Dallas",
-    channels: ["s"],
-  },
-  {
-    id: 89,
-    slots: ["W74", "W77"],
-    when: "04/07 · 22:00 · Filadélfia",
-    channels: ["s"],
-  },
-  {
-    id: 90,
-    slots: ["W73", "W75"],
-    when: "04/07 · 18:00 · Houston",
-    channels: ["s"],
-  },
-  {
-    id: 91,
-    slots: ["W76", "W78"],
-    when: "05/07 · 21:00 · Nova Iorque",
-    channels: ["s"],
-  },
-  {
-    id: 92,
-    slots: ["W79", "W80"],
-    when: "06/07 · 01:00 · Cidade do México",
-    channels: ["s"],
-  },
-  {
-    id: 93,
-    slots: ["W83", "W84"],
-    when: "06/07 · 20:00 · Dallas",
-    channels: ["s"],
-  },
-  {
-    id: 94,
-    slots: ["W81", "W82"],
-    when: "07/07 · 01:00 · Seattle",
-    channels: ["s"],
-  },
-  {
-    id: 95,
-    slots: ["W86", "W88"],
-    when: "07/07 · 17:00 · Atlanta",
-    channels: ["s"],
-  },
-  {
-    id: 96,
-    slots: ["W85", "W87"],
-    when: "07/07 · 21:00 · Vancouver",
-    channels: ["s"],
-  },
-  {
-    id: 97,
-    slots: ["W89", "W90"],
-    when: "09/07 · 21:00 · Boston",
-    channels: ["s"],
-  },
-  {
-    id: 98,
-    slots: ["W93", "W94"],
-    when: "10/07 · 20:00 · Los Angeles",
-    channels: ["s"],
-  },
-  {
-    id: 99,
-    slots: ["W91", "W92"],
-    when: "11/07 · 22:00 · Miami",
-    channels: ["s"],
-  },
-  {
-    id: 100,
-    slots: ["W95", "W96"],
-    when: "12/07 · 02:00 · Kansas City",
-    channels: ["s"],
-  },
-  {
-    id: 101,
-    slots: ["W97", "W98"],
-    when: "14/07 · 20:00 · Dallas",
-    channels: ["s"],
-  },
-  {
-    id: 102,
-    slots: ["W99", "W100"],
-    when: "15/07 · 20:00 · Atlanta",
-    channels: ["s"],
-  },
-  {
-    id: 103,
-    slots: ["L101", "L102"],
-    when: "18/07 · 22:00 · Miami",
-    channels: ["s"],
-  },
-  {
-    id: 104,
-    slots: ["W101", "W102"],
-    when: "19/07 · 20:00 · Nova Iorque",
-    channels: ["rtp", "s", "lm"],
-  },
-];
-const KNOCKOUT_BY_ID = {};
-KNOCKOUT_MATCHES.forEach((match) => {
-  KNOCKOUT_BY_ID[match.id] = match;
-});
-
-/* Visual layout of the bracket grid: which matches go in each column,
-   and how many grid rows each match box spans. */
-const BRACKET_COLUMNS = [
-  {
-    column: 1,
-    rowSpan: 1,
-    matchIds: [74, 77, 73, 75, 83, 84, 81, 82, 76, 78, 79, 80, 86, 88, 85, 87],
-  }, // round of 32
-  { column: 2, rowSpan: 2, matchIds: [89, 90, 93, 94, 91, 92, 95, 96] }, // round of 16
-  { column: 3, rowSpan: 4, matchIds: [97, 98, 99, 100] }, // quarter-finals
-  { column: 4, rowSpan: 8, matchIds: [101, 102] }, // semi-finals
-];
-const FINAL_MATCH_ID = 104,
-  THIRD_PLACE_MATCH_ID = 103;
 /* =================== LIVE RESULTS API =================== */
 
-const API_BASE = "https://worldcup26.ir";
+/* Point straight at the public API by default. When you run the bundled
+   dev proxy (`python3 serve.py`), it injects window.API_BASE = "" so the
+   /get/* calls go through the same origin — no CORS, no flaky-500 noise. */
+const API_BASE =
+  typeof window !== "undefined" && typeof window.API_BASE === "string"
+    ? window.API_BASE
+    : "https://worldcup26.ir";
 let teamIdToCode = null;
 let syncIntervalId = null;
 let liveKeys = {};
 let syncRunning = false;
+
+/* The public API (worldcup26.ir) is flaky: it rate-limits aggressively and
+   intermittently answers 500 / drops the connection. On those failures it also
+   omits the CORS header, so the browser misreports it as a "CORS" error.
+   Retry a few times with backoff so the buttons work despite the wobble. */
+async function apiFetchJSON(path, { retries = 3, timeout = 12000 } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    if (attempt > 0) {
+      /* back off: 0.6s, 1.2s, 2.4s … */
+      await new Promise((r) => setTimeout(r, 600 * 2 ** (attempt - 1)));
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (res.ok) return await res.json();
+      lastError = new Error(`HTTP ${res.status}`);
+      /* 5xx / 429 are transient → retry; other 4xx won't fix themselves */
+      if (res.status >= 500 || res.status === 429) continue;
+      throw lastError;
+    } catch (error) {
+      clearTimeout(timer);
+      lastError = error;
+      /* a non-transient HTTP error already decided we shouldn't retry */
+      if (error instanceof Error && /^HTTP [4]/.test(error.message))
+        throw error;
+    }
+  }
+  throw lastError || new Error("request failed");
+}
 
 /* Build fixture timestamp map for time-window filtering.
 	 Key = groupLetter+index, value = epoch ms (Portugal time, UTC+1). */
@@ -1403,25 +99,17 @@ async function ensureTeamMapping() {
   if (teamIdToCode) return;
   teamIdToCode = {};
   try {
-    const res = await fetch(`${API_BASE}/get/teams`);
-    const data = await res.json();
+    const data = await apiFetchJSON("/get/teams");
     const list = data.teams || data.matches || data || [];
     (Array.isArray(list) ? list : []).forEach((t) => {
       if (t.fifa_code) teamIdToCode[t.id] = t.fifa_code;
     });
   } catch (e) {
+    /* allow a later attempt to rebuild the mapping */
+    teamIdToCode = null;
     console.warn("[api] team mapping failed", e);
+    throw e;
   }
-}
-
-/* Reverse map from our team code to API team IDs */
-function _buildTeamCodeToId() {
-  const rev = {};
-  if (!teamIdToCode) return rev;
-  for (const [id, fifaCode] of Object.entries(teamIdToCode)) {
-    rev[fifaCode] = id;
-  }
-  return rev;
 }
 
 /* Match an API game object to our fixture key. Returns fixtureKey string or null. */
@@ -1442,36 +130,6 @@ function apiMatchToFixtureKey(matchData) {
   return null;
 }
 
-/* Find matches within [startEpoch,endEpoch] time window.
-	 Returns [{apiId, fixtureKey}] */
-function _findMatchesInWindow(startEpoch, endEpoch) {
-  const result = [];
-  for (const gl of GROUP_LETTERS) {
-    GROUP_FIXTURES[gl].forEach((f, i) => {
-      const key = gl + i;
-      const ts = fixtureTimestamps[key];
-      if (ts && ts >= startEpoch && ts <= endEpoch) {
-        const homeCode = teamIdToCode
-          ? Object.entries(teamIdToCode).find(
-              ([_id, code]) => code === f.home,
-            )?.[0]
-          : "";
-        const awayCode = teamIdToCode
-          ? Object.entries(teamIdToCode).find(
-              ([_id, code]) => code === f.away,
-            )?.[0]
-          : "";
-        if (homeCode && awayCode) {
-          /* API match id = index within group-specific games. Need actual API id.
-						 We'll match by teams instead. Store fixtureKey and rely on teams. */
-          result.push({ fixtureKey: key, home: f.home, away: f.away });
-        }
-      }
-    });
-  }
-  return result;
-}
-
 /* Fetch team mapping + all games, write scores for finished matches. */
 async function fetchAllResults() {
   const btn = document.getElementById("fetchBtn");
@@ -1480,8 +138,7 @@ async function fetchAllResults() {
   btn.textContent = "📥 A obter…";
   try {
     await ensureTeamMapping();
-    const res = await fetch(`${API_BASE}/get/games`);
-    const data = await res.json();
+    const data = await apiFetchJSON("/get/games");
     const games = data.games || data.matches || data;
     if (!Array.isArray(games)) return;
     let updated = 0;
@@ -1503,11 +160,19 @@ async function fetchAllResults() {
       saveState();
       renderAll();
     }
+    btn.disabled = false;
+    btn.textContent = "📥 Obter resultados";
+    return;
   } catch (e) {
     console.warn("[api] fetch failed", e);
+    /* Briefly surface the failure on the button so it doesn't look frozen. */
+    btn.textContent = "⚠️ Falhou — tentar de novo";
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = "📥 Obter resultados";
+    }, 2500);
+    return;
   }
-  btn.disabled = false;
-  btn.textContent = "📥 Obter resultados";
 }
 
 /* Single sync pass: fetch /get/games, update live + finished within 3h window. */
@@ -1519,8 +184,7 @@ async function doSync() {
     const now = Date.now();
     const windowStart = now - 3 * 3600000;
     const windowEnd = now + 2 * 3600000;
-    const res = await fetch(`${API_BASE}/get/games`);
-    const data = await res.json();
+    const data = await apiFetchJSON("/get/games");
     const games = data.games || data.matches || data;
     if (!Array.isArray(games)) return;
     const newLive = {};
@@ -2266,7 +930,9 @@ function knockoutBoxHTML(matchId, context, extraClass) {
     ? `<div class="bk-bc"><span>📺</span>${channelChipsHTML(match.channels, "lg")}</div>`
     : "";
 
-  /* emphasise time in date-time-venue string, like group stage does */
+  /* emphasise time in date-time-venue string, like group stage does.
+     Each piece keeps its trailing separator glued (nowrap) so a "·" never
+     dangles at the start of a wrapped line on narrow screens. */
   const whenParts = match.when.split("·").map((p) => p.trim());
   const venue =
     whenParts[2] === "Cidade do México"
@@ -2274,7 +940,7 @@ function knockoutBoxHTML(matchId, context, extraClass) {
       : whenParts[2];
   const whenHTML =
     whenParts.length === 3
-      ? `${whenParts[0]} · <b>${whenParts[1]}</b> · ${venue}`
+      ? `<span class="w-piece">${whenParts[0]} ·</span> <span class="w-piece"><b>${whenParts[1]}</b> ·</span> <span class="w-piece">${venue}</span>`
       : match.when;
 
   return `<div class="bk ${extraClass || ""}">
@@ -2387,6 +1053,196 @@ function renderBracket(context) {
   }
 }
 
+/* Fill the nav progress indicator: how many of the 104 matches have a result. */
+/* =================== MATCHES (CALENDAR) VIEW =================== */
+
+const WEEKDAYS_PT = [
+  "Domingo",
+  "Segunda",
+  "Terça",
+  "Quarta",
+  "Quinta",
+  "Sexta",
+  "Sábado",
+];
+
+/* Compact round label + group badge text for a knockout match id. */
+function knockoutBadge(matchId) {
+  if (matchId === FINAL_MATCH_ID) return "Final";
+  if (matchId === THIRD_PLACE_MATCH_ID) return "3.º/4.º";
+  if (matchId >= 101) return "Semi";
+  if (matchId >= 97) return "Quartos";
+  if (matchId >= 89) return "Oitavos";
+  return "16 avos";
+}
+
+/* Resolved team-cell content for the matches list: real team when known,
+   otherwise the placeholder slot label (e.g. "Vencedor Grupo A"). */
+function matchTeamCell(teamCode, slotToken, match) {
+  if (teamCode) {
+    return `<span class="mt-flag">${TEAMS[teamCode].flag}</span><span class="mt-name">${escapeHTML(TEAMS[teamCode].name)}</span>`;
+  }
+  const label = slotToken ? describeSlot(slotToken, match) : "—";
+  return `<span class="mt-flag">·</span><span class="mt-name ph">${escapeHTML(label)}</span>`;
+}
+
+/* Build a flat, time-sorted list of all 104 matches with everything the
+   calendar view needs. */
+function buildAllMatches(context) {
+  const matches = [];
+
+  GROUP_LETTERS.forEach((groupLetter) => {
+    GROUP_FIXTURES[groupLetter].forEach((fixture, index) => {
+      const fixtureKey = `${groupLetter}${index}`;
+      const score = state.groupScores[fixtureKey];
+      const hasScore =
+        score &&
+        score[0] !== "" &&
+        score[1] !== "" &&
+        score[0] != null &&
+        score[1] != null;
+      const matchKey = `${groupLetter}|${fixture.home}|${fixture.away}`;
+      const stadiumId = GROUP_MATCH_STADIUM[matchKey];
+      const matchNumber = GROUP_MATCH_NUMBER[matchKey];
+      matches.push({
+        ts: fixtureTimestamps[fixtureKey] ?? Number.MAX_SAFE_INTEGER,
+        date: fixture.date,
+        time: fixture.time,
+        badgeNum: `J${matchNumber}`,
+        badgePhase: `Grupo ${groupLetter}`,
+        homeHTML: matchTeamCell(fixture.home, null, null),
+        awayHTML: matchTeamCell(fixture.away, null, null),
+        homeScore: hasScore ? score[0] : null,
+        awayScore: hasScore ? score[1] : null,
+        live: liveKeys[fixtureKey] || null,
+        channels: fixture.channels,
+        stadiumId,
+      });
+    });
+  });
+
+  KNOCKOUT_MATCHES.forEach((match) => {
+    const result =
+      knockoutCache[match.id] || computeKnockoutResult(match.id, context);
+    const entry = state.knockoutGames[match.id];
+    const pairingKey =
+      result.home && result.away ? `${result.home}|${result.away}` : null;
+    const hasScore =
+      entry &&
+      entry.key === pairingKey &&
+      entry.homeGoals !== "" &&
+      entry.awayGoals !== "" &&
+      entry.homeGoals != null &&
+      entry.awayGoals != null;
+    const whenParts = match.when.split("·").map((part) => part.trim());
+    matches.push({
+      ts: fixtureTimestamps[`ko-${match.id}`] ?? Number.MAX_SAFE_INTEGER,
+      date: whenParts[0],
+      time: (whenParts[1] || "").match(/\d{1,2}:\d{2}/)?.[0] || "",
+      badgeNum: `J${match.id}`,
+      badgePhase: knockoutBadge(match.id),
+      homeHTML: matchTeamCell(result.home, match.slots[0], match),
+      awayHTML: matchTeamCell(result.away, match.slots[1], match),
+      homeScore: hasScore ? entry.homeGoals : null,
+      awayScore: hasScore ? entry.awayGoals : null,
+      penalties: hasScore && result.wentToPenalties ? result.winner : null,
+      live: null,
+      channels: match.channels,
+      stadiumId: KO_MATCH_STADIUM[match.id],
+    });
+  });
+
+  matches.sort((a, b) => a.ts - b.ts);
+  return matches;
+}
+
+/* Centre cell that lines results up by the dash and times up by the colon:
+   left number / separator / right number share fixed-width columns. */
+function matchResultHTML(match) {
+  if (match.homeScore != null && match.awayScore != null) {
+    const liveClass = match.live ? " live" : "";
+    return `<span class="mres${liveClass}">
+      <span class="rl">${escapeHTML(String(match.homeScore))}</span>
+      <span class="rs">–</span>
+      <span class="rr">${escapeHTML(String(match.awayScore))}</span>
+    </span>`;
+  }
+  const [hh, mm] = (match.time || "").split(":");
+  return `<span class="mres time">
+    <span class="rl">${escapeHTML(hh || "")}</span>
+    <span class="rs">:</span>
+    <span class="rr">${escapeHTML(mm || "")}</span>
+  </span>`;
+}
+
+function renderMatches(context) {
+  const container = document.getElementById("matchesList");
+  if (!container) return;
+
+  const matches = buildAllMatches(context);
+
+  /* Group consecutive (already time-sorted) matches by calendar day. */
+  const days = [];
+  let current = null;
+  matches.forEach((match) => {
+    if (!current || current.date !== match.date) {
+      const [dd, mm] = match.date.split("/").map(Number);
+      const weekday =
+        WEEKDAYS_PT[new Date(Date.UTC(2026, mm - 1, dd)).getUTCDay()];
+      current = { date: match.date, weekday, items: [] };
+      days.push(current);
+    }
+    current.items.push(match);
+  });
+
+  let html = "";
+  days.forEach((day) => {
+    const rows = day.items
+      .map((match) => {
+        const stadium = match.stadiumId ? STADIUMS[match.stadiumId] : null;
+        const venueHTML = stadium
+          ? `<span class="m-venue"><b>${escapeHTML(stadium.name)}</b><span class="m-city">${escapeHTML(stadium.city)}</span></span>`
+          : `<span class="m-venue"></span>`;
+        const penaltyHTML = match.penalties
+          ? `<span class="m-pen" title="Decidido no prolongamento / penáltis">pen ${escapeHTML(TEAMS[match.penalties].flag)}</span>`
+          : "";
+        return `<div class="mrow${match.live ? " live" : ""}">
+          <span class="m-badge"><span class="m-badge-num">${escapeHTML(match.badgeNum)}</span><span class="m-badge-sep"> | </span><span class="m-badge-phase">${escapeHTML(match.badgePhase)}</span></span>
+          <span class="m-home">${match.homeHTML}</span>
+          ${matchResultHTML(match)}
+          <span class="m-away">${match.awayHTML}${penaltyHTML}</span>
+          ${channelChipsHTML(match.channels, "lg")}
+          ${venueHTML}
+        </div>`;
+      })
+      .join("");
+    html += `<div class="mday">
+      <div class="mday-head"><span class="mday-wd">${day.weekday}</span><span class="mday-dt">${escapeHTML(day.date)}</span><span class="mday-count">${day.items.length} ${day.items.length === 1 ? "jogo" : "jogos"}</span></div>
+      <div class="mday-rows">${rows}</div>
+    </div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function renderProgress(context) {
+  const progEl = document.getElementById("prog");
+  if (!progEl) return;
+
+  let groupPlayed = 0;
+  GROUP_LETTERS.forEach((groupLetter) => {
+    groupPlayed += context.groupsData[groupLetter].playedResults.length;
+  });
+
+  let knockoutPlayed = 0;
+  KNOCKOUT_MATCHES.forEach((match) => {
+    if (knockoutCache[match.id]?.winner) knockoutPlayed++;
+  });
+
+  const totalPlayed = groupPlayed + knockoutPlayed;
+  progEl.textContent = `${totalPlayed} / 104 jogos`;
+}
+
 let renderBracketWidth = window.innerWidth;
 window.addEventListener("resize", () => {
   const w = window.innerWidth;
@@ -2413,6 +1269,8 @@ function renderAll() {
   renderGroups(context);
   renderThirdPlaceTable(context);
   renderBracket(context);
+  renderMatches(context);
+  renderProgress(context);
 
   document.querySelectorAll("details.fp").forEach((el, i) => {
     if (openDetails[i]) el.open = true;
@@ -2517,11 +1375,46 @@ document.getElementById("clearResultsBtn")?.addEventListener("click", () => {
 document.getElementById("fetchBtn")?.addEventListener("click", fetchAllResults);
 document.getElementById("syncBtn")?.addEventListener("click", toggleSync);
 
+/* =================== TABS =================== */
+const VIEW_KEY = `${STORAGE_KEY}-view`;
+function setView(viewName) {
+  const isMatches = viewName === "matches";
+  document.getElementById("view-wallchart").hidden = isMatches;
+  document.getElementById("view-matches").hidden = !isMatches;
+  /* The section nav (Grupos / Melhores 3.ªˢ / Quadro) belongs to the
+     wallchart tab only; the toolbar below it is shared by both tabs. */
+  const sectionNav = document.getElementById("sectionNav");
+  if (sectionNav) sectionNav.hidden = isMatches;
+  document.querySelectorAll(".tab").forEach((tab) => {
+    const active = tab.dataset.view === viewName;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  try {
+    localStorage.setItem(VIEW_KEY, viewName);
+  } catch (_error) {}
+}
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => setView(tab.dataset.view));
+});
+(function initView() {
+  let viewName = null;
+  try {
+    viewName = localStorage.getItem(VIEW_KEY);
+  } catch (_error) {}
+  setView(viewName === "matches" ? "matches" : "wallchart");
+})();
+
 /* =================== THEME =================== */
 const themeButton = document.getElementById("themeBtn");
 function applyTheme(themeName) {
   document.documentElement.setAttribute("data-theme", themeName);
-  themeButton.textContent = themeName === "dark" ? "◑ Claro" : "◐ Escuro";
+  const isDark = themeName === "dark";
+  /* show the icon of the theme you'd switch *to* */
+  themeButton.textContent = isDark ? "☀️" : "🌙";
+  themeButton.title = isDark
+    ? "Mudar para tema claro"
+    : "Mudar para tema escuro";
   try {
     localStorage.setItem(`${STORAGE_KEY}-theme`, themeName);
   } catch (_error) {}

@@ -3,114 +3,194 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+      name="description"
+      content="Quadro interativo do Campeonato do Mundo FIFA 2026 — resultados da fase de grupos, melhores terceiras e quadro a eliminar, com classificações e desempates pela ordem oficial da FIFA."
+    >
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#c8401f">
     <title>Mundial 2026</title>
+    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
     <link rel="stylesheet" href="style.css">
+    <!-- Set the theme before first paint to avoid a flash of the wrong theme. -->
+    <script src="theme-init.js"></script>
   </head>
 
   <body>
     <div class="wrap">
       <header>
         <div class="kicker">Campeonato do Mundo FIFA · United 2026</div>
-        <h1>Mundial <span class="yr">’26</span></h1>
+        <div class="title-row">
+          <img
+            class="emblem emblem-light"
+            src="icons/worldcup2026_black.png"
+            alt="Emblema do Campeonato do Mundo FIFA 2026"
+            width="225"
+            height="345"
+          >
+          <img
+            class="emblem emblem-dark"
+            src="icons/worldcup2026_white.png"
+            alt="Emblema do Campeonato do Mundo FIFA 2026"
+            width="225"
+            height="348"
+          >
+          <h1>Mundial <span class="yr">’26</span></h1>
+        </div>
         <div class="sub">
           48 seleções · 12 grupos · 104 jogos · 11 de junho — 19 de julho de
           2026 · horas de Portugal Continental
         </div>
-        <div class="hosts">🇨🇦 🇲🇽 🇺🇸</div>
+        <div class="hosts">
+          <span class="flags">🇨🇦 🇲🇽 🇺🇸</span>
+          <button
+            type="button"
+            id="themeBtn"
+            title="Mudar para tema escuro"
+            aria-label="Alternar entre tema claro e escuro"
+          >
+            🌙
+          </button>
+        </div>
         <hr class="rule">
       </header>
 
-      <nav>
-        <a href="#groups">Grupos</a>
-        <a href="#thirds">Melhores 3.ªˢ</a>
-        <a href="#bracket">Quadro</a>
-        <span class="prog" id="prog"></span>
-        <button
-          type="button"
-          id="themeBtn"
-          class="theme"
-          title="Alternar entre claro e escuro"
-        >
-          ◐ Escuro
-        </button>
-        <button
-          type="button"
-          id="resetBtn"
-          title="Limpar todos os resultados e cartões inseridos"
-        >
-          Limpar tudo
-        </button>
-        <button
-          type="button"
-          id="clearResultsBtn"
-          title="Limpar apenas os resultados, mantém os cartões"
-        >
-          Limpar resultados
-        </button>
-        <button type="button" id="fetchBtn" class="fetch">
-          📥 Obter resultados
-        </button>
-        <button type="button" id="syncBtn" class="sync">
-          🔴 Manter sincronizado
-        </button>
-      </nav>
-
-      <section id="groups">
-        <div class="sec-head">
-          <span class="no">01</span>
-          <h2>Fase de Grupos</h2>
-          <span class="hint"
-            >Escreve os resultados — as classificações e o quadro atualizam-se
-            ao momento.</span
+      <div class="stickybar">
+        <div class="tabs" role="tablist">
+          <button
+            type="button"
+            class="tab active"
+            data-view="wallchart"
+            role="tab"
+            aria-selected="true"
+            aria-controls="view-wallchart"
           >
-        </div>
-        <p class="sec-note">
-          Os empates em pontos seguem a ordem oficial da FIFA: pontos no
-          confronto direto → diferença de golos no confronto direto → golos
-          marcados no confronto direto (reaplicados entre equipas ainda
-          empatadas) → diferença de golos total → golos marcados totais →
-          pontuação de conduta (fair play) → ranking FIFA de 11 de junho de 2026
-          (já guardado para as 48 seleções, assinalado com
-          <span class="tiemark">R</span>
-          quando usado). Os cartões para o desempate por conduta inserem-se em
-          “dados de desempate” em cada grupo.
-        </p>
-        <div class="groups" id="groupsGrid"></div>
-      </section>
-
-      <section id="thirds">
-        <div class="sec-head">
-          <span class="no">02</span>
-          <h2>Classificação das Terceiras</h2>
-          <span class="hint"
-            >As 8 melhores de 12 apuram-se · pontos → dif. golos → golos →
-            conduta → ranking FIFA</span
+            📋 Quadro Geral
+          </button>
+          <button
+            type="button"
+            class="tab"
+            data-view="matches"
+            role="tab"
+            aria-selected="false"
+            aria-controls="view-matches"
           >
+            📅 Calendário de jogos
+          </button>
         </div>
-        <p class="sec-note">
-          A linha vermelha tracejada é o corte. Os adversários nos 16 avos de
-          final seguem o Anexo C da FIFA — as 495 combinações possíveis estão
-          incluídas, por isso o quadro emparelha exatamente como a FIFA fará
-          quando todos os grupos terminarem.
-        </p>
-        <div class="thirdwrap" id="thirdsWrap"></div>
-      </section>
 
-      <section id="bracket">
-        <div class="sec-head">
-          <span class="no">03</span>
-          <h2>Fase a Eliminar</h2>
-          <span class="hint"
-            >16 avos de final → Final · em caso de empate, escolhe quem passa no
-            prolongamento / penáltis</span
-          >
+        <div class="controls">
+          <!-- Tab-specific options: only for the Quadro Geral tab -->
+          <nav class="section-nav" id="sectionNav">
+            <a href="#groups">Grupos</a>
+            <a href="#thirds">Melhores 3.ªˢ</a>
+            <a href="#bracket">Quadro</a>
+          </nav>
+          <!-- Shared options: available in both tabs -->
+          <div class="toolbar">
+            <span class="prog" id="prog"></span>
+            <button
+              type="button"
+              id="resetBtn"
+              title="Limpar todos os resultados e cartões inseridos"
+            >
+              Limpar tudo
+            </button>
+            <button
+              type="button"
+              id="clearResultsBtn"
+              title="Limpar apenas os resultados, mantém os cartões"
+            >
+              Limpar resultados
+            </button>
+            <button type="button" id="fetchBtn" class="fetch">
+              📥 Obter resultados
+            </button>
+            <button type="button" id="syncBtn" class="sync">
+              🔴 Manter sincronizado
+            </button>
+          </div>
         </div>
-        <div class="brwrap">
-          <div class="bracket-flex" id="bracketGrid"></div>
-        </div>
-      </section>
+      </div>
+
+      <div id="view-wallchart" class="view">
+        <section id="groups">
+          <div class="sec-head">
+            <span class="no">01</span>
+            <h2>Fase de Grupos</h2>
+            <span class="hint"
+              >Escreve os resultados — as classificações e o quadro atualizam-se
+              ao momento.</span
+            >
+          </div>
+          <p class="sec-note">
+            Os empates em pontos seguem a ordem oficial da FIFA: pontos no
+            confronto direto → diferença de golos no confronto direto → golos
+            marcados no confronto direto (reaplicados entre equipas ainda
+            empatadas) → diferença de golos total → golos marcados totais →
+            pontuação de conduta (fair play) → ranking FIFA de 11 de junho de
+            2026 (já guardado para as 48 seleções, assinalado com
+            <span class="tiemark">R</span>
+            quando usado). Os cartões para o desempate por conduta inserem-se em
+            “dados de desempate” em cada grupo.
+          </p>
+          <div class="groups" id="groupsGrid"></div>
+        </section>
+
+        <section id="thirds">
+          <div class="sec-head">
+            <span class="no">02</span>
+            <h2>Classificação das Terceiras</h2>
+            <span class="hint"
+              >As 8 melhores de 12 apuram-se · pontos → dif. golos → golos →
+              conduta → ranking FIFA</span
+            >
+          </div>
+          <p class="sec-note">
+            A linha vermelha tracejada é o corte. Os adversários nos 16 avos de
+            final seguem o Anexo C da FIFA — as 495 combinações possíveis estão
+            incluídas, por isso o quadro emparelha exatamente como a FIFA fará
+            quando todos os grupos terminarem.
+          </p>
+          <div class="thirdwrap" id="thirdsWrap"></div>
+        </section>
+
+        <section id="bracket">
+          <div class="sec-head">
+            <span class="no">03</span>
+            <h2>Fase a Eliminar</h2>
+            <span class="hint"
+              >16 avos de final → Final · em caso de empate, escolhe quem passa
+              no prolongamento / penáltis</span
+            >
+          </div>
+          <div class="brwrap">
+            <div class="bracket-flex" id="bracketGrid"></div>
+          </div>
+        </section>
+      </div>
+
+      <div id="view-matches" class="view" hidden>
+        <section id="matches">
+          <div class="sec-head">
+            <span class="no">📅</span>
+            <h2>Calendário de Jogos</h2>
+            <span class="hint"
+              >Todos os 104 jogos por dia · resultado ou hora · transmissão ·
+              estádio</span
+            >
+          </div>
+          <p class="sec-note">
+            Os jogos da fase a eliminar mostram as seleções assim que ficarem
+            apuradas; até lá aparecem os lugares (vencedor de grupo, melhores
+            terceiras, etc.). Horas de Portugal Continental.
+          </p>
+          <div id="matchesList"></div>
+        </section>
+      </div>
     </div>
 
+    <script src="data.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

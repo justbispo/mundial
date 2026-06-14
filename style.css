@@ -57,6 +57,28 @@ header {
   padding: 34px 0 18px;
   text-align: center;
 }
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2.5vw, 22px);
+  margin: 10px 0 4px;
+}
+.emblem {
+  display: block;
+  height: clamp(56px, 11vw, 92px);
+  width: auto;
+}
+/* Swap the black/white emblem to match the active theme. */
+.emblem-dark {
+  display: none;
+}
+html[data-theme="dark"] .emblem-light {
+  display: none;
+}
+html[data-theme="dark"] .emblem-dark {
+  display: block;
+}
 .kicker {
   font-size: 11px;
   letter-spacing: 0.35em;
@@ -93,50 +115,110 @@ h1 .yr {
   margin-top: 3px;
 }
 .hosts {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 10px auto 0;
+  /* same centred band as .rule so the toggle lines up with the ruler's end */
+  max-width: 680px;
+}
+.hosts .flags {
   font-size: 20px;
   letter-spacing: 0.25em;
-  margin-top: 10px;
+}
+/* pinned to the right edge of the flags line, vertically centred */
+#themeBtn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--shadow2);
+  transform: translateY(-50%);
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease;
+}
+#themeBtn:hover {
+  border-color: var(--ink);
+  transform: translateY(-50%) translateY(-1px);
+}
+#themeBtn:active {
+  transform: translateY(-50%);
+  box-shadow: 1px 1px 0 var(--shadow2);
 }
 
-/* ---------- nav ---------- */
-nav {
+/* ---------- sticky bar: tabs + controls travel together ---------- */
+.stickybar {
   position: sticky;
   top: 0;
   z-index: 50;
   background: var(--paper);
   border-bottom: 1.5px solid var(--ink);
-  padding: 9px 0;
   margin-bottom: 30px;
+}
+
+/* ---------- controls (per-tab options + shared toolbar) ---------- */
+.controls {
+  padding: 9px 0;
   display: flex;
-  gap: 6px;
+  gap: 8px 16px;
   justify-content: center;
   flex-wrap: wrap;
   align-items: center;
 }
-nav a {
+.section-nav,
+.toolbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+/* Section nav is tab-specific: hidden on the matches tab via [hidden]. */
+.section-nav[hidden] {
+  display: none;
+}
+.section-nav a {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
   text-decoration: none;
   color: var(--ink);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  padding: 5px 13px;
+  letter-spacing: 0.1em;
+  padding: 5px 11px;
   border: 1.5px solid var(--ink);
   background: var(--card);
   border-radius: 2px;
 }
-nav a:hover {
+.section-nav a:hover {
   background: var(--ink);
   color: var(--card);
 }
-nav .prog {
+.toolbar .prog {
   font-size: 11px;
   color: var(--ink-soft);
   letter-spacing: 0.05em;
   padding: 0 6px;
 }
-nav button {
+.toolbar button {
+  display: inline-flex;
+  align-items: center;
   font: inherit;
+  line-height: 1;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -148,36 +230,26 @@ nav button {
   padding: 5px 11px;
   cursor: pointer;
 }
-nav button:hover {
+.toolbar button:hover {
   background: var(--red);
   color: #fff;
   border-style: solid;
 }
-nav button.theme {
-  color: var(--ink);
-  border: 1.5px solid var(--ink);
-  border-style: solid;
-  background: var(--card);
-}
-nav button.theme:hover {
-  background: var(--ink);
-  color: var(--card);
-}
-nav button.fetch:disabled {
+.toolbar button.fetch:disabled {
   opacity: 0.5;
   cursor: default;
 }
-nav button.fetch:disabled:hover {
+.toolbar button.fetch:disabled:hover {
   background: none;
   color: var(--red);
   border-style: dashed;
 }
-nav button.sync.active {
+.toolbar button.sync.active {
   background: var(--red);
   color: #fff;
   border-style: solid;
 }
-nav button.sync.active:hover {
+.toolbar button.sync.active:hover {
   background: var(--red);
   color: #fff;
 }
@@ -805,9 +877,11 @@ table.thirds .outx {
   padding: 4px 8px;
   border-bottom: 1px solid var(--line);
   color: var(--ink-soft);
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  text-align: center;
+  text-wrap: balance;
+}
+.bk-when .w-piece {
+  white-space: nowrap;
 }
 .v-short {
   display: none;
@@ -1105,5 +1179,293 @@ html[data-theme="dark"] .bk.final .bk-head {
   }
   .bracket-flex .bk {
     min-width: 0;
+  }
+}
+
+/* ---------- tabs ---------- */
+.tabs {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  padding: 12px 0 0;
+}
+.tabs .tab {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: inherit;
+  font-size: clamp(13px, 2.4vw, 16px);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 var(--shadow2);
+  padding: 13px 14px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.12s ease;
+}
+.tabs .tab:hover {
+  background: var(--ink);
+  color: var(--card);
+}
+.tabs .tab.active {
+  color: #fff;
+  background: var(--red);
+  border-color: var(--red);
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+.tabs .tab.active:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+/* ---------- matches (calendar) view ---------- */
+#matches .sec-head .no {
+  font-size: 18px;
+}
+.mday {
+  margin-bottom: 22px;
+}
+.mday-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border-bottom: 1.5px solid var(--ink);
+  padding: 0 2px 6px;
+  margin-bottom: 4px;
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  z-index: 10;
+}
+.mday-wd {
+  font-size: 14px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.mday-dt {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--red);
+  letter-spacing: 0.02em;
+}
+.mday-count {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+}
+.mday-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Row grid: group | home | result | away | tv | venue.
+   Home is right-aligned and away left-aligned so the result column,
+   which lines up by the dash/colon, sits centred between the teams. */
+.mrow {
+  display: grid;
+  grid-template-columns:
+    clamp(82px, 9vw, 104px)
+    minmax(0, 1fr)
+    clamp(58px, 9vw, 76px)
+    minmax(0, 1fr)
+    clamp(52px, 8vw, 88px)
+    clamp(120px, 17vw, 210px);
+  align-items: center;
+  gap: clamp(5px, 1vw, 12px);
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: clamp(13px, 1.5vw, 15px);
+}
+.mrow:last-child {
+  border-bottom: 0;
+}
+.mrow.live {
+  background: rgba(200, 64, 31, 0.06);
+}
+.m-badge {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  border: 1.5px solid var(--line);
+  border-radius: 20px;
+  padding: 3px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+.m-badge-num {
+  white-space: nowrap;
+}
+.m-badge-phase {
+  white-space: nowrap;
+}
+.m-home,
+.m-away {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 700;
+}
+.m-home {
+  justify-content: flex-end;
+  text-align: right;
+}
+.m-away {
+  justify-content: flex-start;
+  text-align: left;
+}
+.m-home .mt-flag,
+.m-away .mt-flag {
+  flex: none;
+  font-size: 1.15em;
+}
+.mt-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mt-name.ph {
+  color: var(--ph);
+  font-weight: 600;
+  font-size: 0.92em;
+}
+.m-home .mt-flag {
+  order: 2;
+}
+
+/* Result / time: three fixed cells so every dash (and every colon) aligns
+   vertically down the whole list. */
+.mres {
+  display: inline-grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  font-size: clamp(15px, 2vw, 18px);
+  white-space: nowrap;
+}
+.mres .rl {
+  text-align: right;
+}
+.mres .rr {
+  text-align: left;
+}
+.mres .rs {
+  padding: 0 4px;
+}
+.mres.time {
+  font-weight: 800;
+  font-size: clamp(13px, 1.6vw, 15px);
+  color: var(--ink-soft);
+}
+.mres.live .rl,
+.mres.live .rr {
+  color: var(--red);
+}
+.m-pen {
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.m-venue {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+  text-align: right;
+}
+.m-venue b {
+  font-size: 11.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m-venue .m-city {
+  font-size: 10px;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mrow .bcs {
+  justify-content: center;
+}
+
+/* Compact layout for narrow screens: stack venue under the match line. */
+@media (max-width: 720px) {
+  .mrow {
+    grid-template-columns:
+      clamp(50px, 13vw, 62px)
+      minmax(0, 1fr)
+      clamp(52px, 16vw, 64px)
+      minmax(0, 1fr)
+      clamp(46px, 13vw, 70px);
+    grid-template-areas:
+      "badge home result away tv"
+      "venue venue venue venue venue";
+    row-gap: 3px;
+  }
+  .m-badge {
+    grid-area: badge;
+    /* stack "J70" over "Grupo J" so it never crowds the team names */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.2;
+    border-radius: 10px;
+    padding: 3px 4px;
+    white-space: normal;
+  }
+  .m-badge-sep {
+    display: none;
+  }
+  .m-home {
+    grid-area: home;
+  }
+  .mres {
+    grid-area: result;
+  }
+  .m-away {
+    grid-area: away;
+  }
+  .mrow .bcs {
+    grid-area: tv;
+  }
+  .m-venue {
+    grid-area: venue;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: baseline;
+    justify-content: center;
+    text-align: center;
+    padding-left: 0;
+  }
+  .m-venue .m-city::before {
+    content: "·";
+    margin-right: 6px;
   }
 }
