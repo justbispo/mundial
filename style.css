@@ -403,7 +403,7 @@ section {
   color: var(--ink);
 }
 .fx.live {
-  background: rgba(200, 64, 31, 0.06);
+  background: rgba(200, 64, 31, 0.15);
 }
 .fx.live .d .live-min {
   color: var(--red);
@@ -1294,7 +1294,7 @@ html[data-theme="dark"] .bk.final .bk-head {
   border-bottom: 0;
 }
 .mrow.live {
-  background: rgba(200, 64, 31, 0.06);
+  background: rgba(200, 64, 31, 0.14);
 }
 .m-badge {
   font-size: 9.5px;
