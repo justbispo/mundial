@@ -689,6 +689,9 @@ table.fpt col.c-team {
 table.fpt col.c-num {
   width: 44px;
 }
+table.fpt col.c-stat {
+  width: 30px;
+}
 table.fpt td.tl {
   white-space: nowrap;
   overflow: hidden;

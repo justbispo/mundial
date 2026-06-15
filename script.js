@@ -9,13 +9,7 @@
 
 /* =================== LIVE RESULTS API =================== */
 
-/* Point straight at the public API by default. When you run the bundled
-   dev proxy (`python3 serve.py`), it injects window.API_BASE = "" so the
-   /get/* calls go through the same origin — no CORS, no flaky-500 noise. */
-const API_BASE =
-  typeof window !== "undefined" && typeof window.API_BASE === "string"
-    ? window.API_BASE
-    : "https://worldcup26.ir";
+const API_BASE = "https://worldcup26.ir";
 let teamIdToCode = null;
 let syncIntervalId = null;
 let liveKeys = {};
@@ -77,38 +71,11 @@ function showToast(
   };
 }
 
-/* The public API (worldcup26.ir) is flaky: it rate-limits aggressively and
-   intermittently answers 500 / drops the connection. On those failures it also
-   omits the CORS header, so the browser misreports it as a "CORS" error.
-   Retry a few times with backoff so the buttons work despite the wobble. */
-async function apiFetchJSON(path, { retries = 3, timeout = 12000 } = {}) {
-  let lastError;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    if (attempt > 0) {
-      /* back off: 0.6s, 1.2s, 2.4s … */
-      await new Promise((r) => setTimeout(r, 600 * 2 ** (attempt - 1)));
-    }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
-    try {
-      const res = await fetch(`${API_BASE}${path}`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      if (res.ok) return await res.json();
-      lastError = new Error(`HTTP ${res.status}`);
-      /* 5xx / 429 are transient → retry; other 4xx won't fix themselves */
-      if (res.status >= 500 || res.status === 429) continue;
-      throw lastError;
-    } catch (error) {
-      clearTimeout(timer);
-      lastError = error;
-      /* a non-transient HTTP error already decided we shouldn't retry */
-      if (error instanceof Error && /^HTTP [4]/.test(error.message))
-        throw error;
-    }
-  }
-  throw lastError || new Error("request failed");
+/* Fetch JSON from the live-results API. */
+async function apiFetchJSON(path) {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
 /* Build fixture timestamp map for time-window filtering.
@@ -309,7 +276,7 @@ function toggleSync() {
 /* Everything the user types lives here and is persisted to localStorage:
 	 - groupScores:   "A0".."L5" -> [homeGoals, awayGoals] as strings
 	 - knockoutGames: matchId -> {key:"HOME|AWAY", homeGoals, awayGoals, penaltyWinnerSide}
-	 - cards:         teamCode -> [yellows, secondYellows, directReds, yellowPlusReds] */
+	 - cards:         teamCode -> [yellows, secondYellows, directReds] */
 const STORAGE_KEY = "wc26wallchart";
 let state;
 
@@ -339,15 +306,14 @@ function saveState() {
 
 /* =================== GROUP STAGE LOGIC =================== */
 
-/* Conduct ("fair play") score: -1 yellow, -3 second yellow, -4 direct red,
-	 -5 yellow followed by direct red. Higher (closer to 0) is better. */
+/* Conduct ("fair play") score: -1 yellow, -3 second yellow, -4 direct red.
+	 Higher (closer to 0) is better. */
 function conductScore(teamCode) {
-  const cards = state.cards[teamCode] || [0, 0, 0, 0];
+  const cards = state.cards[teamCode] || [0, 0, 0];
   const yellows = +cards[0] || 0,
     secondYellows = +cards[1] || 0;
-  const directReds = +cards[2] || 0,
-    yellowPlusReds = +cards[3] || 0;
-  return -(yellows + 3 * secondYellows + 4 * directReds + 5 * yellowPlusReds);
+  const directReds = +cards[2] || 0;
+  return -(yellows + 3 * secondYellows + 4 * directReds);
 }
 
 /* Compute table + finishing order for one group letter. Returns:
@@ -856,13 +822,12 @@ function renderGroups(context) {
     /* tie-break drawer: cards per team */
     let cardsHTML = "";
     group.order.forEach((teamCode) => {
-      const cards = state.cards[teamCode] || ["", "", "", ""];
+      const cards = state.cards[teamCode] || ["", "", ""];
       cardsHTML += `<tr>
         <td class="tl">${TEAMS[teamCode].flag} ${escapeHTML(TEAMS[teamCode].name)}</td>
         <td><input class="fpi" data-k="fp-${teamCode}-0" value="${cards[0] ?? ""}" inputmode="numeric" maxlength="2"></td>
         <td><input class="fpi" data-k="fp-${teamCode}-1" value="${cards[1] ?? ""}" inputmode="numeric" maxlength="2"></td>
         <td><input class="fpi" data-k="fp-${teamCode}-2" value="${cards[2] ?? ""}" inputmode="numeric" maxlength="2"></td>
-        <td><input class="fpi" data-k="fp-${teamCode}-3" value="${cards[3] ?? ""}" inputmode="numeric" maxlength="2"></td>
         <td><b>${conductScore(teamCode)}</b></td>
         <td>#${TEAMS[teamCode].fifaRank}</td>
       </tr>`;
@@ -887,13 +852,13 @@ function renderGroups(context) {
         <table class="fpt">
           <colgroup>
             <col class="c-team">
-            <col class="c-num"><col class="c-num"><col class="c-num"><col class="c-num">
-            <col class="c-num"><col class="c-num">
+            <col class="c-num"><col class="c-num"><col class="c-num">
+            <col class="c-stat"><col class="c-stat">
           </colgroup>
-          <thead><tr><th class="tl">Equipa</th><th title="Cartão amarelo (−1)">🟨</th><th title="Duplo amarelo (−3)">🟨🟨</th><th title="Vermelho direto (−4)">🟥</th><th title="Amarelo + vermelho direto (−5)">🟨+🟥</th><th>Pont.</th><th>FIFA</th></tr></thead>
+          <thead><tr><th class="tl">Equipa</th><th title="Cartão amarelo (−1)">🟨</th><th title="Duplo amarelo (−3)">🟨🟨</th><th title="Vermelho direto (−4)">🟥</th><th>Pont.</th><th>FIFA</th></tr></thead>
           <tbody>${cardsHTML}</tbody>
         </table>
-        <div class="fpnote">Pontuação de conduta = −1 por amarelo, −3 por duplo amarelo, −4 por vermelho direto, −5 por amarelo + vermelho direto. Só conta se as equipas continuarem empatadas após o confronto direto e os golos; o ranking FIFA (coluna da direita, 11 jun 2026) desfaz automaticamente qualquer empate restante.</div>
+        <div class="fpnote">Pontuação de conduta = −1 por amarelo, −3 por duplo amarelo, −4 por vermelho direto. Um amarelo seguido de vermelho direto soma os dois (−1 −4 = −5). Só conta se as equipas continuarem empatadas após o confronto direto e os golos; o ranking FIFA (coluna da direita, 11 jun 2026) desfaz automaticamente qualquer empate restante.</div>
           </details>
         </div>
       </div>
@@ -1388,7 +1353,7 @@ document.addEventListener("input", (event) => {
     if (!state.groupScores[id]) state.groupScores[id] = ["", ""];
     state.groupScores[id][+side] = cleanValue;
   } else if (kind === "fp") {
-    if (!state.cards[id]) state.cards[id] = ["", "", "", ""];
+    if (!state.cards[id]) state.cards[id] = ["", "", ""];
     state.cards[id][+side] = cleanValue;
   } else if (kind === "ko") {
     const matchId = +id;
