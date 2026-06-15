@@ -3,6 +3,18 @@
     "files": {
         "includes": ["**", "!icons/*.svg"]
     },
+    "overrides": [
+        {
+            "includes": ["data.js"],
+            "linter": {
+                "rules": {
+                    "correctness": {
+                        "noUnusedVariables": "off"
+                    }
+                }
+            }
+        }
+    ],
     "html": {
         "formatter": {
             "enabled": true

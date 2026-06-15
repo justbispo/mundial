@@ -9,7 +9,7 @@
  *     stay fresh.
  * Bump CACHE_VERSION whenever the shell files change to force an update.
  */
-const CACHE_VERSION = "mundial26-v1";
+const CACHE_VERSION = "mundial26-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -23,8 +23,8 @@ const APP_SHELL = [
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
   "./icons/apple-touch-icon.png",
-  "./icons/worldcup2026_black.png",
-  "./icons/worldcup2026_white.png",
+  "./icons/world_cup_black.png",
+  "./icons/world_cup_white.png",
   "./icons/livemodetv_dark.svg",
   "./icons/livemodetv_light.svg",
   "./icons/rtp1.svg",

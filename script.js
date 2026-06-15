@@ -21,6 +21,62 @@ let syncIntervalId = null;
 let liveKeys = {};
 let syncRunning = false;
 
+/* =================== TOAST NOTIFICATIONS =================== */
+
+/* Show a small notification (bottom-right on desktop, bottom on phones).
+   Returns a controller so a long-running toast can be updated/dismissed:
+     const t = showToast("A obter resultados…", { kind: "loading", sticky: true });
+     t.update("Resultados atualizados", { kind: "success" });
+     t.dismiss(2500); */
+function showToast(
+  message,
+  { kind = "info", sticky = false, duration = 3500 } = {},
+) {
+  const host = document.getElementById("toasts");
+  if (!host) return { update() {}, dismiss() {} };
+
+  const icons = {
+    loading: '<span class="toast-spinner" aria-hidden="true"></span>',
+    success: '<span class="toast-ico">✓</span>',
+    error: '<span class="toast-ico">⚠️</span>',
+    info: '<span class="toast-ico">ℹ️</span>',
+  };
+
+  const el = document.createElement("div");
+  el.className = `toast toast-${kind}`;
+  el.setAttribute("role", "status");
+  el.innerHTML = `${icons[kind] || ""}<span class="toast-msg"></span>`;
+  el.querySelector(".toast-msg").textContent = message;
+  host.appendChild(el);
+  /* trigger the slide-in transition on the next frame */
+  requestAnimationFrame(() => el.classList.add("show"));
+
+  let timer = null;
+  const remove = () => {
+    el.classList.remove("show");
+    el.addEventListener("transitionend", () => el.remove(), { once: true });
+    /* safety net if the transition never fires */
+    setTimeout(() => el.remove(), 400);
+  };
+  const dismiss = (delay = 0) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(remove, delay);
+  };
+  if (!sticky) dismiss(duration);
+
+  return {
+    update(newMessage, { kind: newKind } = {}) {
+      if (newKind) {
+        el.className = `toast toast-${newKind} show`;
+        const ico = icons[newKind] || "";
+        el.innerHTML = `${ico}<span class="toast-msg"></span>`;
+      }
+      el.querySelector(".toast-msg").textContent = newMessage;
+    },
+    dismiss,
+  };
+}
+
 /* The public API (worldcup26.ir) is flaky: it rate-limits aggressively and
    intermittently answers 500 / drops the connection. On those failures it also
    omits the CORS header, so the browser misreports it as a "CORS" error.
@@ -136,11 +192,21 @@ async function fetchAllResults() {
   if (!btn) return;
   btn.disabled = true;
   btn.textContent = "📥 A obter…";
+  const toast = showToast("A obter resultados…", {
+    kind: "loading",
+    sticky: true,
+  });
   try {
     await ensureTeamMapping();
     const data = await apiFetchJSON("/get/games");
     const games = data.games || data.matches || data;
-    if (!Array.isArray(games)) return;
+    if (!Array.isArray(games)) {
+      toast.update("Sem resultados disponíveis", { kind: "info" });
+      toast.dismiss(3000);
+      btn.disabled = false;
+      btn.textContent = "📥 Obter resultados";
+      return;
+    }
     let updated = 0;
     for (const m of games) {
       if (m.finished !== "TRUE" && m.time_elapsed === "notstarted") continue;
@@ -160,11 +226,22 @@ async function fetchAllResults() {
       saveState();
       renderAll();
     }
+    toast.update(
+      updated > 0
+        ? `Resultados atualizados (${updated} ${updated === 1 ? "jogo" : "jogos"})`
+        : "Já estás atualizado",
+      { kind: "success" },
+    );
+    toast.dismiss(3000);
     btn.disabled = false;
     btn.textContent = "📥 Obter resultados";
     return;
   } catch (e) {
     console.warn("[api] fetch failed", e);
+    toast.update("Falha ao obter resultados. Tenta de novo.", {
+      kind: "error",
+    });
+    toast.dismiss(4000);
     /* Briefly surface the failure on the button so it doesn't look frozen. */
     btn.textContent = "⚠️ Falhou — tentar de novo";
     setTimeout(() => {
@@ -1439,3 +1516,8 @@ themeButton.addEventListener("click", () => {
 })();
 
 renderAll();
+
+/* Auto-fetch the latest results on load so the user doesn't have to press
+   "Obter resultados" every time. Runs in the background; the button shows its
+   own progress/failure state, and the page already rendered any saved data. */
+fetchAllResults();

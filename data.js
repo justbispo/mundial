@@ -1,5 +1,3 @@
-// biome-ignore-all lint/correctness/noUnusedVariables: used in script.js
-
 /*
  * data.js — static tournament data for the Mundial 2026 wallchart.
  *
