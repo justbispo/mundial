@@ -390,14 +390,124 @@ function computeGroup(groupLetter) {
   /* rankingNotes[team]=true when the FIFA ranking had to break the tie */
   const rankingNotes = {};
   const order = rankGroupTeams(teams, stats, playedResults, rankingNotes);
+  const complete = playedResults.length === 6;
   return {
     teams,
     stats,
     playedResults,
     order,
     rankingNotes,
-    complete: playedResults.length === 6,
+    complete,
+    /* per-team finishing-position info ({ best, worst, locked }), known even
+       before all matches are played; for a complete group every spot is fixed */
+    positionInfo: complete
+      ? Object.fromEntries(
+          order.map((team, position) => [
+            team,
+            { best: position, worst: position, locked: position },
+          ]),
+        )
+      : clinchedPositions(groupLetter, teams, playedResults),
   };
+}
+
+/* Detect group positions that are mathematically locked before the group ends.
+   Sound (never claims a false lock): for every possible win/draw/loss outcome of
+   the remaining matches, a team's finishing position must be identical. Ordering
+   uses the parts of the FIFA tiebreak that goal scores can't overturn — points,
+   then head-to-head points within a points-tied set — so a position counts as
+   "clinched" only when it holds regardless of how goals fall. Returns
+   { teamCode: position(0-based) } for the teams whose place is fixed. */
+function clinchedPositions(groupLetter, teams, playedResults) {
+  const fixtures = GROUP_FIXTURES[groupLetter];
+  const playedKeys = new Set(playedResults.map((r) => `${r.home}|${r.away}`));
+  const remaining = fixtures.filter(
+    (f) => !playedKeys.has(`${f.home}|${f.away}`),
+  );
+  if (remaining.length === 0) return {};
+
+  /* base points + head-to-head points from the matches already played */
+  const basePoints = {};
+  const baseH2H = {};
+  teams.forEach((a) => {
+    basePoints[a] = 0;
+    baseH2H[a] = {};
+    teams.forEach((b) => {
+      baseH2H[a][b] = 0;
+    });
+  });
+  const applyOutcome = (home, away, outcome, points, h2h) => {
+    if (outcome === "H") {
+      points[home] += 3;
+      h2h[home][away] += 3;
+    } else if (outcome === "A") {
+      points[away] += 3;
+      h2h[away][home] += 3;
+    } else {
+      points[home] += 1;
+      points[away] += 1;
+      h2h[home][away] += 1;
+      h2h[away][home] += 1;
+    }
+  };
+  playedResults.forEach((r) => {
+    const outcome =
+      r.homeGoals > r.awayGoals ? "H" : r.homeGoals < r.awayGoals ? "A" : "D";
+    applyOutcome(r.home, r.away, outcome, basePoints, baseH2H);
+  });
+
+  /* enumerate every win/draw/loss combination of the remaining matches */
+  const possible = {};
+  teams.forEach((t) => {
+    possible[t] = new Set();
+  });
+  const outcomes = ["H", "D", "A"];
+  const total = 3 ** remaining.length;
+  for (let mask = 0; mask < total; mask++) {
+    const points = { ...basePoints };
+    const h2h = {};
+    teams.forEach((a) => {
+      h2h[a] = { ...baseH2H[a] };
+    });
+    let m = mask;
+    for (const f of remaining) {
+      applyOutcome(f.home, f.away, outcomes[m % 3], points, h2h);
+      m = Math.floor(m / 3);
+    }
+    /* "certainly above" given fixed outcomes: more points, or — when tied on
+       points — more head-to-head points within the points-tied cluster. Equal
+       on both ⇒ goals would decide ⇒ not certain. */
+    const certainlyAbove = (a, b) => {
+      if (points[a] !== points[b]) return points[a] > points[b];
+      const cluster = teams.filter((t) => points[t] === points[a]);
+      const h2hPoints = (t) =>
+        cluster.reduce((sum, o) => (o === t ? sum : sum + h2h[t][o]), 0);
+      if (h2hPoints(a) !== h2hPoints(b)) return h2hPoints(a) > h2hPoints(b);
+      return false;
+    };
+    for (const t of teams) {
+      const above = teams.filter((o) => o !== t && certainlyAbove(o, t)).length;
+      const below = teams.filter((o) => o !== t && certainlyAbove(t, o)).length;
+      const worst = teams.length - 1 - below;
+      for (let p = above; p <= worst; p++) possible[t].add(p);
+    }
+  }
+
+  /* For each team: best (min) and worst (max) possible finishing position over
+     all remaining outcomes. position === best === worst ⇒ exact spot locked.
+     worst <= 1 ⇒ guaranteed top-2 (qualified) even if 1st/2nd not yet decided. */
+  const positions = {};
+  teams.forEach((t) => {
+    const list = [...possible[t]];
+    const best = Math.min(...list);
+    const worst = Math.max(...list);
+    positions[t] = {
+      best,
+      worst,
+      locked: best === worst ? best : null,
+    };
+  });
+  return positions;
 }
 
 /* FIFA tie-break procedure:
@@ -700,8 +810,13 @@ function resolveSlot(slotToken, context) {
   const kind = slotToken[0];
   if (kind === "1" || kind === "2") {
     const group = context.groupsData[slotToken[1]];
-    if (!group.complete) return null;
-    return group.order[kind === "1" ? 0 : 1];
+    const wantedPosition = kind === "1" ? 0 : 1;
+    if (group.complete) return group.order[wantedPosition];
+    /* resolve early if that finishing position is already mathematically locked */
+    const clinchedTeam = Object.keys(group.positionInfo).find(
+      (team) => group.positionInfo[team].locked === wantedPosition,
+    );
+    return clinchedTeam || null;
   }
   if (kind === "T") {
     const matchId = +slotToken.slice(1);
@@ -794,6 +909,33 @@ function renderGroups(context) {
       let rowClass = "",
         dotClass = "tbd",
         dotTitle = "";
+      const posInfo = group.positionInfo[teamCode];
+      const lastPosition = group.teams.length - 1;
+      if (!group.complete && posInfo) {
+        /* colour a row only when the team is GUARANTEED to land in a band,
+           across every remaining outcome (best..worst is its position range):
+             top-2  → green (qualified)
+             3rd    → amber (might still advance as a best third)
+             last   → red (eliminated)
+           anything still spanning bands stays neutral. */
+        if (posInfo.worst <= 1) {
+          rowClass = "r-adv";
+          dotClass = "adv";
+          dotTitle =
+            posInfo.locked != null
+              ? `${posInfo.locked + 1}.º lugar garantido · apurada para os 16 avos de final`
+              : "Apuramento garantido para os 16 avos de final";
+        } else if (posInfo.best === lastPosition) {
+          rowClass = "r-out";
+          dotClass = "out";
+          dotTitle = "Eliminada · último lugar garantido";
+        } else if (posInfo.locked === 2) {
+          rowClass = "r-third";
+          dotClass = "third";
+          dotTitle =
+            "3.º lugar garantido · apuramento como melhor terceira por decidir";
+        }
+      }
       if (group.complete) {
         if (position < 2) {
           rowClass = "r-adv";
@@ -822,9 +964,15 @@ function renderGroups(context) {
       const rankingMark = group.rankingNotes[teamCode]
         ? `<sup class="tiemark" title="Empate resolvido pelo ranking FIFA (#${TEAMS[teamCode].fifaRank})">R</sup>`
         : "";
+      /* lock badge only when the EXACT finishing place is fixed (not merely
+         when a team is guaranteed to qualify but 1st/2nd is still open) */
+      const lockMark =
+        !group.complete && posInfo?.locked != null
+          ? `<span class="lockmark" title="${posInfo.locked + 1}.º lugar garantido">🔒</span>`
+          : "";
       standingsHTML += `<tr class="${rowClass}">
         <td><span class="qdot ${dotClass}" title="${dotTitle}"></span></td>
-        <td class="team">${TEAMS[teamCode].flag} ${escapeHTML(TEAMS[teamCode].name)}${rankingMark}</td>
+        <td class="team">${TEAMS[teamCode].flag} ${escapeHTML(TEAMS[teamCode].name)}${rankingMark}${lockMark}</td>
         <td>${teamStats.played}</td><td class="cv">${teamStats.wins}</td><td class="ce">${teamStats.draws}</td><td class="cd">${teamStats.losses}</td>
         <td>${teamStats.goalsFor}</td><td>${teamStats.goalsAgainst}</td>
         <td>${teamStats.goalDifference > 0 ? "+" : ""}${teamStats.goalDifference}</td>
