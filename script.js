@@ -582,27 +582,40 @@ function buildTournamentContext() {
     (groupLetter) => groupsData[groupLetter].complete,
   );
 
-  let thirdPlaceAssignments = null;
-  if (groupStageComplete) {
+  /* Annex C assignment of the best-8 third-placed teams to round-of-32 matches,
+     based on the current ranking. Returns matchId -> { code, groupLetter } or
+     null. Computed from current standings so it also works "if it ended now". */
+  const provisionalThirds = (() => {
     const bestEight = thirdPlaceRanking.list.slice(0, 8);
     const combinationKey = bestEight
       .map((entry) => entry.groupLetter)
       .sort()
       .join("");
     const slotGroups = THIRD_PLACE_BRACKET_MAP[combinationKey];
-    if (slotGroups) {
-      thirdPlaceAssignments = {};
-      THIRD_PLACE_MATCH_ORDER.forEach((matchId, index) => {
-        const sourceGroup = slotGroups[index];
-        thirdPlaceAssignments[matchId] = groupsData[sourceGroup].order[2];
-      });
-    }
+    if (!slotGroups) return null;
+    const out = {};
+    THIRD_PLACE_MATCH_ORDER.forEach((matchId, index) => {
+      const groupLetter = slotGroups[index];
+      out[matchId] = { groupLetter, code: groupsData[groupLetter].order[2] };
+    });
+    return out;
+  })();
+
+  /* The definitive assignment (used to actually resolve slots) only exists once
+     every group is finished. */
+  let thirdPlaceAssignments = null;
+  if (groupStageComplete && provisionalThirds) {
+    thirdPlaceAssignments = {};
+    THIRD_PLACE_MATCH_ORDER.forEach((matchId) => {
+      thirdPlaceAssignments[matchId] = provisionalThirds[matchId].code;
+    });
   }
   return {
     groupsData,
     thirdPlaceRanking,
     groupStageComplete,
     thirdPlaceAssignments,
+    provisionalThirds,
   };
 }
 
@@ -934,6 +947,15 @@ function knockoutBoxHTML(matchId, context, extraClass) {
       const group = context.groupsData[slotToken[1]];
       if (group.playedResults.length > 0 && !group.complete)
         return group.order[kind === "1" ? 0 : 1] || null;
+    }
+    if (kind === "T") {
+      /* provisional 3rd-placed team (Annex C "if it ended now"), shown until
+         the whole group stage is complete and the real assignment is fixed */
+      const assignment = context.provisionalThirds?.[+slotToken.slice(1)];
+      if (assignment?.code) {
+        const sourceGroup = context.groupsData[assignment.groupLetter];
+        if (sourceGroup.playedResults.length > 0) return assignment.code;
+      }
     }
     return null;
   };
