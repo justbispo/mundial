@@ -646,6 +646,12 @@ tr.r-out td {
   font-weight: 900;
   cursor: help;
 }
+.lockmark {
+  margin-left: 4px;
+  font-size: 0.78em;
+  cursor: help;
+  vertical-align: baseline;
+}
 
 /* fair play details */
 details.fp {
@@ -1279,7 +1285,8 @@ html[data-theme="dark"] .bk.final .bk-head {
   flex-direction: column;
 }
 
-/* Row grid: group | home | result | away | tv | venue.
+/* Row grid: group | home | result | away | tv | venue, with a scorers line
+   sitting directly under the home/result/away block.
    Home is right-aligned and away left-aligned so the result column,
    which lines up by the dash/colon, sits centred between the teams. */
 .mrow {
@@ -1291,6 +1298,9 @@ html[data-theme="dark"] .bk.final .bk-head {
     minmax(0, 1fr)
     clamp(52px, 8vw, 88px)
     clamp(120px, 17vw, 210px);
+  grid-template-areas:
+    "badge home result away tv venue"
+    "badge scorers scorers scorers tv venue";
   align-items: center;
   gap: clamp(5px, 1vw, 12px);
   padding: 9px 2px;
@@ -1305,6 +1315,7 @@ html[data-theme="dark"] .bk.final .bk-head {
   box-shadow: inset 3px 0 0 var(--red);
 }
 .m-badge {
+  grid-area: badge;
   font-size: 9.5px;
   font-weight: 800;
   text-transform: uppercase;
@@ -1331,10 +1342,12 @@ html[data-theme="dark"] .bk.final .bk-head {
   font-weight: 700;
 }
 .m-home {
+  grid-area: home;
   justify-content: flex-end;
   text-align: right;
 }
 .m-away {
+  grid-area: away;
   justify-content: flex-start;
   text-align: left;
 }
@@ -1360,6 +1373,7 @@ html[data-theme="dark"] .bk.final .bk-head {
 /* Result / time: three fixed cells so every dash (and every colon) aligns
    vertically down the whole list. */
 .mres {
+  grid-area: result;
   display: inline-grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: baseline;
@@ -1395,7 +1409,50 @@ html[data-theme="dark"] .bk.final .bk-head {
   color: var(--ink-soft);
   white-space: nowrap;
 }
+/* goal scorers under the result: home column right-aligned, away left-aligned,
+   so the first home and first away scorer share the top line */
+.m-scorers {
+  grid-area: scorers;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: 2px 6px;
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+}
+.m-scorers .sc-home,
+.m-scorers .sc-away {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.m-scorers .sc-home {
+  text-align: right;
+  align-items: flex-end;
+}
+.m-scorers .sc-away {
+  text-align: left;
+  align-items: flex-start;
+}
+.m-scorers .sc-ball {
+  font-size: 8px;
+  line-height: 1.6;
+}
+.m-scorers .sc-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.m-scorers .sc-min {
+  font-weight: 700;
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+}
 .m-venue {
+  grid-area: venue;
   display: flex;
   flex-direction: column;
   line-height: 1.2;
@@ -1419,10 +1476,12 @@ html[data-theme="dark"] .bk.final .bk-head {
   white-space: nowrap;
 }
 .mrow .bcs {
+  grid-area: tv;
   justify-content: center;
 }
 
-/* Compact layout for narrow screens: stack venue under the match line. */
+/* Compact layout for narrow screens: the teams/result stay on the first line;
+   scorers, then TV logos, then venue each drop onto their own line below. */
 @media (max-width: 720px) {
   .mrow {
     grid-template-columns:
@@ -1433,8 +1492,9 @@ html[data-theme="dark"] .bk.final .bk-head {
       clamp(46px, 13vw, 70px);
     grid-template-areas:
       "badge home result away tv"
+      "scorers scorers scorers scorers scorers"
       "venue venue venue venue venue";
-    row-gap: 3px;
+    row-gap: 4px;
   }
   .m-badge {
     grid-area: badge;
@@ -1446,24 +1506,12 @@ html[data-theme="dark"] .bk.final .bk-head {
     border-radius: 10px;
     padding: 3px 4px;
     white-space: normal;
+    align-self: center;
   }
   .m-badge-sep {
     display: none;
   }
-  .m-home {
-    grid-area: home;
-  }
-  .mres {
-    grid-area: result;
-  }
-  .m-away {
-    grid-area: away;
-  }
-  .mrow .bcs {
-    grid-area: tv;
-  }
   .m-venue {
-    grid-area: venue;
     flex-direction: row;
     flex-wrap: wrap;
     gap: 6px;
@@ -1471,6 +1519,8 @@ html[data-theme="dark"] .bk.final .bk-head {
     justify-content: center;
     text-align: center;
     padding-left: 0;
+    /* extra breathing room before the stadium/city line */
+    margin-top: 4px;
   }
   .m-venue .m-city::before {
     content: "·";

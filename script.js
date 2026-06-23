@@ -135,6 +135,32 @@ async function ensureTeamMapping() {
   }
 }
 
+/* Normalise the API's match status. time_elapsed is one of
+   "notstarted" / "live" / "finished" (case-insensitive). */
+function matchStatus(m) {
+  const e = (m.time_elapsed || "").toLowerCase();
+  if (e === "live") return "live";
+  if (e === "finished" || m.finished === "TRUE") return "finished";
+  return "notstarted";
+}
+
+/* Parse the API scorers field ("{\"J. Quiñones 9'\",\"R. Jiménez 67'\"}" or
+   "null") into a clean array of strings. Handles the curly-quote variant the
+   API sometimes returns. */
+function parseScorers(raw) {
+  if (!raw || raw === "null") return [];
+  let s = String(raw).trim();
+  if (s.startsWith("{") && s.endsWith("}")) s = s.slice(1, -1);
+  if (!s) return [];
+  /* entries are wrapped in double quotes (straight " or curly “ ”) and joined
+     by commas; split on the comma that sits between two wrapping quotes so the
+     apostrophe minute marks (9') inside an entry are preserved */
+  return s
+    .split(/(?<=["“”])\s*,\s*(?=["“”])/)
+    .map((part) => part.replace(/^["“”]+|["“”]+$/g, "").trim())
+    .filter(Boolean);
+}
+
 /* Match an API game object to our fixture key. Returns fixtureKey string or null. */
 function apiMatchToFixtureKey(matchData) {
   const m = matchData;
@@ -176,18 +202,22 @@ async function fetchAllResults() {
     }
     let updated = 0;
     for (const m of games) {
-      if (m.finished !== "TRUE" && m.time_elapsed === "notstarted") continue;
-      if (
-        m.home_score === "" ||
-        m.away_score === "" ||
-        m.home_score == null ||
-        m.away_score == null
-      )
-        continue;
+      if (matchStatus(m) === "notstarted") continue;
       const key = apiMatchToFixtureKey(m);
       if (!key) continue;
-      state.groupScores[key] = [m.home_score, m.away_score];
-      updated++;
+      const hasScore =
+        m.home_score !== "" &&
+        m.away_score !== "" &&
+        m.home_score != null &&
+        m.away_score != null;
+      if (hasScore) {
+        state.groupScores[key] = [m.home_score, m.away_score];
+        updated++;
+      }
+      state.scorers[key] = {
+        home: parseScorers(m.home_scorers),
+        away: parseScorers(m.away_scorers),
+      };
     }
     if (updated > 0) {
       saveState();
@@ -219,15 +249,15 @@ async function fetchAllResults() {
   }
 }
 
-/* Single sync pass: fetch /get/games, update live + finished within 3h window. */
+/* Single sync pass: fetch /get/games and refresh live + finished matches.
+   Liveness comes straight from the API's time_elapsed status (live), not the
+   scheduled kick-off time, so delayed matches and several matches running at
+   once (e.g. the simultaneous final group round) are all detected. */
 async function doSync() {
   if (syncRunning) return;
   syncRunning = true;
   try {
     await ensureTeamMapping();
-    const now = Date.now();
-    const windowStart = now - 3 * 3600000;
-    const windowEnd = now + 2 * 3600000;
     const data = await apiFetchJSON("/get/games");
     const games = data.games || data.matches || data;
     if (!Array.isArray(games)) return;
@@ -235,15 +265,19 @@ async function doSync() {
     for (const m of games) {
       const key = apiMatchToFixtureKey(m);
       if (!key) continue;
-      const ts = fixtureTimestamps[key];
-      if (!ts || ts < windowStart || ts > windowEnd) continue;
-      if (m.finished === "TRUE") {
-        state.groupScores[key] = [m.home_score, m.away_score];
-        continue;
-      }
-      if (m.time_elapsed === "notstarted") continue;
-      state.groupScores[key] = [m.home_score, m.away_score];
-      newLive[key] = m.time_elapsed;
+      const status = matchStatus(m);
+      if (status === "notstarted") continue;
+      const hasScore =
+        m.home_score !== "" &&
+        m.away_score !== "" &&
+        m.home_score != null &&
+        m.away_score != null;
+      if (hasScore) state.groupScores[key] = [m.home_score, m.away_score];
+      state.scorers[key] = {
+        home: parseScorers(m.home_scorers),
+        away: parseScorers(m.away_scorers),
+      };
+      if (status === "live") newLive[key] = true;
     }
     liveKeys = newLive;
     saveState();
@@ -276,12 +310,13 @@ function toggleSync() {
 /* Everything the user types lives here and is persisted to localStorage:
 	 - groupScores:   "A0".."L5" -> [homeGoals, awayGoals] as strings
 	 - knockoutGames: matchId -> {key:"HOME|AWAY", homeGoals, awayGoals, penaltyWinnerSide}
-	 - cards:         teamCode -> [yellows, secondYellows, directReds] */
+	 - cards:         teamCode -> [yellows, secondYellows, directReds]
+	 - scorers:       fixtureKey -> { home: [..], away: [..] } from the live API */
 const STORAGE_KEY = "wc26wallchart";
 let state;
 
 function freshState() {
-  return { groupScores: {}, knockoutGames: {}, cards: {} };
+  return { groupScores: {}, knockoutGames: {}, cards: {}, scorers: {} };
 }
 function loadState() {
   try {
@@ -291,6 +326,7 @@ function loadState() {
         groupScores: saved.groupScores || {},
         knockoutGames: saved.knockoutGames || {},
         cards: saved.cards || {},
+        scorers: saved.scorers || {},
       };
     }
   } catch (_error) {}
@@ -889,7 +925,7 @@ function renderGroups(context) {
       const score = state.groupScores[groupLetter + index] || ["", ""];
       const fixtureKey = `${groupLetter}${index}`;
       const isLive = liveKeys[fixtureKey];
-      const liveBadge = isLive ? `<span class="live-min">${isLive}</span>` : "";
+      const liveBadge = isLive ? `<span class="live-min">AO VIVO</span>` : "";
       fixturesHTML += `<div class="fx ${isLive ? "live" : ""}">
         <span class="d"><b>${fixture.date}</b><b>${fixture.time}</b>${liveBadge}</span>
         <span class="h">${escapeHTML(TEAMS[fixture.home].name)} ${TEAMS[fixture.home].flag}</span>
@@ -1327,6 +1363,7 @@ function buildAllMatches(context) {
         homeScore: hasScore ? score[0] : null,
         awayScore: hasScore ? score[1] : null,
         live: liveKeys[fixtureKey] || null,
+        scorers: state.scorers[fixtureKey] || null,
         channels: fixture.channels,
         stadiumId,
       });
@@ -1387,6 +1424,63 @@ function matchResultHTML(match) {
   </span>`;
 }
 
+/* Goal scorers under the result: home (right-aligned) and away (left-aligned)
+   in two columns, so the first home scorer lines up with the first away scorer
+   and each extra scorer drops onto its own line within its column. */
+/* Split a scorer string ("Kylian Mbappé 54'") into { name, min }. The minute is
+   the trailing time token, allowing stoppage time (45'+5') and tags (7'(OG)). */
+function parseScorerEntry(s) {
+  const m = String(s).match(
+    /^(.*?)\s*(\d+['′](?:\s*\+\s*\d+['′])?(?:\s*\([^)]*\))?)\s*$/,
+  );
+  if (m) return { name: m[1].trim(), min: m[2].replace(/\s+/g, "") };
+  return { name: String(s).trim(), min: "" };
+}
+
+/* Group goals by player (keeping first-appearance order) so a player who scored
+   several times shows on one line with all minutes together. */
+function groupScorers(list) {
+  const order = [];
+  const byName = new Map();
+  for (const entry of list) {
+    const { name, min } = parseScorerEntry(entry);
+    if (!byName.has(name)) {
+      byName.set(name, []);
+      order.push(name);
+    }
+    if (min) byName.get(name).push(min);
+  }
+  return order.map((name) => ({ name, mins: byName.get(name) }));
+}
+
+function matchScorersHTML(match) {
+  const home = match.scorers?.home || [];
+  const away = match.scorers?.away || [];
+  if (home.length === 0 && away.length === 0) return "";
+  const nameHTML = (name) => `<span class="sc-name">${escapeHTML(name)}</span>`;
+  const minHTML = (mins) =>
+    `<span class="sc-min">${escapeHTML(mins.join(", "))}</span>`;
+  /* home: name then minutes (minutes sit on the right, near the centre);
+     away: minutes then name (minutes sit on the left, near the centre) */
+  const homeCol = groupScorers(home)
+    .map(
+      (g) =>
+        `<span class="sc-line">${nameHTML(g.name)} ${minHTML(g.mins)}</span>`,
+    )
+    .join("");
+  const awayCol = groupScorers(away)
+    .map(
+      (g) =>
+        `<span class="sc-line">${minHTML(g.mins)} ${nameHTML(g.name)}</span>`,
+    )
+    .join("");
+  return `<div class="m-scorers">
+    <span class="sc-home">${homeCol}</span>
+    <span class="sc-ball" aria-hidden="true">⚽</span>
+    <span class="sc-away">${awayCol}</span>
+  </div>`;
+}
+
 function renderMatches(context) {
   const container = document.getElementById("matchesList");
   if (!container) return;
@@ -1423,6 +1517,7 @@ function renderMatches(context) {
           <span class="m-home">${match.homeHTML}</span>
           ${matchResultHTML(match)}
           <span class="m-away">${match.awayHTML}${penaltyHTML}</span>
+          ${matchScorersHTML(match)}
           ${channelChipsHTML(match.channels, "lg")}
           ${venueHTML}
         </div>`;
