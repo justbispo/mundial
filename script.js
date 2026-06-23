@@ -1427,14 +1427,16 @@ function matchResultHTML(match) {
 /* Goal scorers under the result: home (right-aligned) and away (left-aligned)
    in two columns, so the first home scorer lines up with the first away scorer
    and each extra scorer drops onto its own line within its column. */
-/* Split a scorer string ("Kylian Mbappé 54'") into { name, min }. The minute is
-   the trailing time token, allowing stoppage time (45'+5') and tags (7'(OG)). */
+/* Split a scorer string ("Kylian Mbappé 90+3'") into { name, min }. The minute
+   is the trailing time token; the API is inconsistent about the apostrophe
+   (45'+5', 90+3', 45+5'), so accept it anywhere and normalise to a clean form. */
 function parseScorerEntry(s) {
-  const m = String(s).match(
-    /^(.*?)\s*(\d+['′](?:\s*\+\s*\d+['′])?(?:\s*\([^)]*\))?)\s*$/,
-  );
-  if (m) return { name: m[1].trim(), min: m[2].replace(/\s+/g, "") };
-  return { name: String(s).trim(), min: "" };
+  const str = String(s).trim();
+  const m = str.match(/^(.*?)\s*(\d+\s*['′]?\s*(?:\+\s*\d+\s*['′]?)?)\s*$/);
+  if (!m) return { name: str, min: "" };
+  const name = m[1].trim();
+  const min = `${m[2].replace(/\s+/g, "").replace(/['′]/g, "")}'`;
+  return { name, min };
 }
 
 /* Group goals by player (keeping first-appearance order) so a player who scored
