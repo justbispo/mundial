@@ -179,6 +179,151 @@ function apiMatchToFixtureKey(matchData) {
   return null;
 }
 
+/* =================== GOAL VIDEOS (goals.zone) =================== */
+/* Links each goal in the calendar to its video. Results are cached in state
+   (localStorage) and only re-fetched for matches that are live or not yet
+   cached — once a match is finished and stored, its goals never change. */
+const GOALS_API = "https://gogz.meneses.pt/api/matches";
+/* bump to invalidate every cached goalVideos entry (e.g. after a matching fix) */
+const GOAL_VIDEOS_VERSION = 2;
+/* The goals.zone API only allows its own origin (CORS), so browser requests
+   from anywhere else must go through a proxy. */
+const GOALS_PROXY = "https://api.allorigins.win/raw?url=";
+let goalVideosRunning = false;
+
+/* lower-case, accent-free, collapse spaces — keeps spaces/brackets for the score
+   regex (e.g. "México [1]-0 África" -> "mexico [1]-0 africa"). */
+const normTitle = (s) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+/* alphanumerics only, for punctuation-insensitive team-name matching, so
+   "D.R. Congo" / "dr congo" -> "drcongo" and "Côte d'Ivoire" -> "cotedivoire". */
+const compactName = (s) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+/* English title-name aliases for a team slug, as compact keys. */
+function teamEnglishNames(slug) {
+  return (GOALS_ZONE_ALIASES[slug] || [slug.replace(/-/g, " ")]).map(
+    compactName,
+  );
+}
+
+/* goals.zone match slug: "home-away-YYYYMMDD" (UTC date of kick-off). */
+function goalsZoneSlug(homeCode, awayCode, epochMs) {
+  if (epochMs == null) return null;
+  const d = new Date(epochMs);
+  const ymd =
+    `${d.getUTCFullYear()}` +
+    `${String(d.getUTCMonth() + 1).padStart(2, "0")}` +
+    `${String(d.getUTCDate()).padStart(2, "0")}`;
+  return `${TEAMS[homeCode].slug}-${TEAMS[awayCode].slug}-${ymd}`;
+}
+
+/* Read a goal video title. Returns { side:"home"|"away", n } for an English
+   goal title in the "Team [n] - m Team" format, or null otherwise.
+   Only English titles count: the title must start with the home team's English
+   name and contain the away team's English name. */
+function parseGoalTitle(title, homeCode, awayCode) {
+  const t = normTitle(title);
+  const homeNames = teamEnglishNames(TEAMS[homeCode].slug);
+  const awayNames = teamEnglishNames(TEAMS[awayCode].slug);
+  /* English title: "<home> [n] - m <away>" or "<home> m - [n] <away>".
+     Match the score, then confirm the home name is on the left of it and the
+     away name on the right (punctuation-insensitive, so D.R. Congo works). */
+  for (const [re, side] of [
+    [/^(.*?)\[(\d+)\]\s*-\s*\d+(.*)$/, "home"],
+    [/^(.*?)\d+\s*-\s*\[(\d+)\](.*)$/, "away"],
+  ]) {
+    const m = t.match(re);
+    if (!m) continue;
+    const leftKey = compactName(m[1]);
+    const rightKey = compactName(m[3]);
+    if (
+      homeNames.some((n) => leftKey.startsWith(n)) &&
+      awayNames.some((n) => rightKey.startsWith(n))
+    ) {
+      return { side, n: +m[2] };
+    }
+  }
+  return null;
+}
+
+/* Fetch + parse one match's goal videos. Returns { home:{n:url}, away:{n:url} }. */
+async function fetchGoalVideos(homeCode, awayCode, epochMs) {
+  const slug = goalsZoneSlug(homeCode, awayCode, epochMs);
+  if (!slug) return null;
+  const target = `${GOALS_API}/${slug}?format=json`;
+  const res = await fetch(`${GOALS_PROXY}${encodeURIComponent(target)}`, {
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const out = { home: {}, away: {} };
+  for (const video of data.videos || []) {
+    const goal = parseGoalTitle(video.title, homeCode, awayCode);
+    if (!goal) continue;
+    const url = video.mirrors?.[0]?.url;
+    if (!url) continue;
+    /* keep the first (highest-quality) mirror for each goal */
+    if (out[goal.side][goal.n] == null) out[goal.side][goal.n] = url;
+  }
+  return out;
+}
+
+/* Refresh goal-video links for group matches that have a score. Skips matches
+   already cached and finished; (re)fetches live matches and any not yet cached.
+   Pass force=true to refetch everything (used once after a hard reset). */
+async function syncGoalVideos() {
+  if (goalVideosRunning) return;
+  goalVideosRunning = true;
+  let changed = false;
+  try {
+    for (const gl of GROUP_LETTERS) {
+      const fixtures = GROUP_FIXTURES[gl];
+      for (let i = 0; i < fixtures.length; i++) {
+        const key = gl + i;
+        const score = state.groupScores[key];
+        const hasScore =
+          score && score[0] !== "" && score[1] !== "" && score[0] != null;
+        if (!hasScore) continue;
+        const isLive = !!liveKeys[key];
+        const cached = state.goalVideos[key];
+        /* skip if we already have it and the match isn't live anymore */
+        if (cached && !isLive) continue;
+        try {
+          const fixture = fixtures[i];
+          const videos = await fetchGoalVideos(
+            fixture.home,
+            fixture.away,
+            fixtureTimestamps[key],
+          );
+          if (videos) {
+            state.goalVideos[key] = videos;
+            changed = true;
+          }
+        } catch (e) {
+          console.warn("[goals] fetch failed", key, e);
+        }
+      }
+    }
+    if (changed) {
+      saveState();
+      renderAll();
+    }
+  } finally {
+    goalVideosRunning = false;
+  }
+}
+
 /* Fetch team mapping + all games, write scores for finished matches. */
 async function fetchAllResults() {
   const btn = document.getElementById("fetchBtn");
@@ -223,6 +368,8 @@ async function fetchAllResults() {
       saveState();
       renderAll();
     }
+    /* fill in goal-video links in the background (cached after the first time) */
+    syncGoalVideos();
     toast.update(
       updated > 0
         ? `Resultados atualizados (${updated} ${updated === 1 ? "jogo" : "jogos"})`
@@ -282,6 +429,8 @@ async function doSync() {
     liveKeys = newLive;
     saveState();
     renderAll();
+    /* refresh goal-video links (live matches re-fetch, finished stay cached) */
+    syncGoalVideos();
   } catch (e) {
     console.warn("[api] sync pass failed", e);
   }
@@ -311,12 +460,20 @@ function toggleSync() {
 	 - groupScores:   "A0".."L5" -> [homeGoals, awayGoals] as strings
 	 - knockoutGames: matchId -> {key:"HOME|AWAY", homeGoals, awayGoals, penaltyWinnerSide}
 	 - cards:         teamCode -> [yellows, secondYellows, directReds]
-	 - scorers:       fixtureKey -> { home: [..], away: [..] } from the live API */
+	 - scorers:       fixtureKey -> { home: [..], away: [..] } from the live API
+	 - goalVideos:    fixtureKey -> { home: {n:url}, away: {n:url} } from goals.zone */
 const STORAGE_KEY = "wc26wallchart";
 let state;
 
 function freshState() {
-  return { groupScores: {}, knockoutGames: {}, cards: {}, scorers: {} };
+  return {
+    groupScores: {},
+    knockoutGames: {},
+    cards: {},
+    scorers: {},
+    goalVideos: {},
+    goalVideosVersion: GOAL_VIDEOS_VERSION,
+  };
 }
 function loadState() {
   try {
@@ -327,6 +484,13 @@ function loadState() {
         knockoutGames: saved.knockoutGames || {},
         cards: saved.cards || {},
         scorers: saved.scorers || {},
+        /* drop cached goal videos when the matching logic changes, so they get
+           re-fetched once with the new logic instead of keeping stale/empty data */
+        goalVideos:
+          saved.goalVideosVersion === GOAL_VIDEOS_VERSION
+            ? saved.goalVideos || {}
+            : {},
+        goalVideosVersion: GOAL_VIDEOS_VERSION,
       };
     }
   } catch (_error) {}
@@ -1504,6 +1668,7 @@ function buildAllMatches(context) {
         awayScore: hasScore ? score[1] : null,
         live: liveKeys[fixtureKey] || null,
         scorers: state.scorers[fixtureKey] || null,
+        goalVideos: state.goalVideos[fixtureKey] || null,
         channels: fixture.channels,
         stadiumId,
       });
@@ -1580,40 +1745,54 @@ function parseScorerEntry(s) {
 }
 
 /* Group goals by player (keeping first-appearance order) so a player who scored
-   several times shows on one line with all minutes together. */
+   several times shows on one line with all minutes together. Each minute keeps
+   its 1-based goal index n (the team's cumulative goal count), used to link to
+   that goal's video. */
 function groupScorers(list) {
   const order = [];
   const byName = new Map();
-  for (const entry of list) {
+  list.forEach((entry, idx) => {
     const { name, min } = parseScorerEntry(entry);
     if (!byName.has(name)) {
       byName.set(name, []);
       order.push(name);
     }
-    if (min) byName.get(name).push(min);
-  }
-  return order.map((name) => ({ name, mins: byName.get(name) }));
+    if (min) byName.get(name).push({ min, n: idx + 1 });
+  });
+  return order.map((name) => ({ name, goals: byName.get(name) }));
 }
 
 function matchScorersHTML(match) {
   const home = match.scorers?.home || [];
   const away = match.scorers?.away || [];
   if (home.length === 0 && away.length === 0) return "";
+  const videos = match.goalVideos;
   const nameHTML = (name) => `<span class="sc-name">${escapeHTML(name)}</span>`;
-  const minHTML = (mins) =>
-    `<span class="sc-min">${escapeHTML(mins.join(", "))}</span>`;
+  /* each minute links to its goal video when one is known */
+  const minsHTML = (goals, side) =>
+    `<span class="sc-min">` +
+    goals
+      .map((g) => {
+        const url = videos?.[side]?.[g.n];
+        const txt = escapeHTML(g.min);
+        return url
+          ? `<a class="sc-vid" href="${escapeHTML(url)}" target="_blank" rel="noopener" title="Ver golo">${txt}</a>`
+          : txt;
+      })
+      .join(", ") +
+    `</span>`;
   /* home: name then minutes (minutes sit on the right, near the centre);
      away: minutes then name (minutes sit on the left, near the centre) */
   const homeCol = groupScorers(home)
     .map(
       (g) =>
-        `<span class="sc-line">${nameHTML(g.name)} ${minHTML(g.mins)}</span>`,
+        `<span class="sc-line">${nameHTML(g.name)} ${minsHTML(g.goals, "home")}</span>`,
     )
     .join("");
   const awayCol = groupScorers(away)
     .map(
       (g) =>
-        `<span class="sc-line">${minHTML(g.mins)} ${nameHTML(g.name)}</span>`,
+        `<span class="sc-line">${minsHTML(g.goals, "away")} ${nameHTML(g.name)}</span>`,
     )
     .join("");
   return `<div class="m-scorers">
