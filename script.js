@@ -427,7 +427,7 @@ function computeGroup(groupLetter) {
   const rankingNotes = {};
   const order = rankGroupTeams(teams, stats, playedResults, rankingNotes);
   const complete = playedResults.length === 6;
-  return {
+  const group = {
     teams,
     stats,
     playedResults,
@@ -445,6 +445,9 @@ function computeGroup(groupLetter) {
         )
       : clinchedPositions(groupLetter, teams, playedResults),
   };
+  /* per-team explanation of how a points-tie was separated (for the info icon) */
+  group.tieInfo = buildTieExplanations(group);
+  return group;
 }
 
 /* Detect group positions that are mathematically locked before the group ends.
@@ -671,6 +674,114 @@ function breakTieOverall(tiedTeams, stats, rankingNotes) {
   return sorted;
 }
 
+/* =================== TIE-BREAK EXPLANATIONS =================== */
+
+/* Head-to-head sub-table (points / GD / goals) among a set of tied teams,
+   counting only the matches played between them. */
+function headToHeadAmong(teamSet, playedResults) {
+  const h2h = {};
+  teamSet.forEach((team) => {
+    h2h[team] = { points: 0, goalDifference: 0, goalsFor: 0, played: 0 };
+  });
+  const set = new Set(teamSet);
+  playedResults.forEach((r) => {
+    if (!set.has(r.home) || !set.has(r.away)) return;
+    h2h[r.home].played++;
+    h2h[r.away].played++;
+    h2h[r.home].goalsFor += r.homeGoals;
+    h2h[r.away].goalsFor += r.awayGoals;
+    h2h[r.home].goalDifference += r.homeGoals - r.awayGoals;
+    h2h[r.away].goalDifference += r.awayGoals - r.homeGoals;
+    if (r.homeGoals > r.awayGoals) h2h[r.home].points += 3;
+    else if (r.homeGoals < r.awayGoals) h2h[r.away].points += 3;
+    else {
+      h2h[r.home].points++;
+      h2h[r.away].points++;
+    }
+  });
+  return h2h;
+}
+
+/* The ordered FIFA criteria used to separate two teams once level on points.
+   Each value(team, ctx) returns the comparable number ("value(a) > value(b)" ⇒ a
+   above); ctx = { h2h, stats }. The list mirrors rankGroupTeams/breakTie*. */
+const TIE_CRITERIA = [
+  {
+    label: "Pontos no confronto direto",
+    value: (t, { h2h }) => h2h[t].points,
+  },
+  {
+    label: "Diferença de golos no confronto direto",
+    value: (t, { h2h }) => h2h[t].goalDifference,
+    fmt: (v) => (v > 0 ? `+${v}` : `${v}`),
+  },
+  {
+    label: "Golos marcados no confronto direto",
+    value: (t, { h2h }) => h2h[t].goalsFor,
+  },
+  {
+    label: "Diferença de golos total",
+    value: (t, { stats }) => stats[t].goalDifference,
+    fmt: (v) => (v > 0 ? `+${v}` : `${v}`),
+  },
+  {
+    label: "Golos marcados totais",
+    value: (t, { stats }) => stats[t].goalsFor,
+  },
+  {
+    label: "Pontuação de conduta (fair play)",
+    value: (t) => conductScore(t),
+  },
+  {
+    label: "Ranking FIFA (11 jun 2026)",
+    value: (t) => -TEAMS[t].fifaRank,
+    fmt: (_v, t) => `#${TEAMS[t].fifaRank}`,
+  },
+];
+
+/* For one group, work out — for every team that shares its points total with at
+   least one other team — which criterion put it above the next tied team, and
+   the values involved. Returns { teamCode: { vsCode, vsName, decided } }. */
+function buildTieExplanations(group) {
+  const out = {};
+  const pointClusters = clusterByValue(
+    group.order,
+    (team) => group.stats[team].points,
+  );
+
+  pointClusters.forEach((cluster) => {
+    if (cluster.length < 2) return;
+    /* cluster is already in final finishing order (group.order is sorted) */
+    const h2h = headToHeadAmong(cluster, group.playedResults);
+    const ctx = { h2h, stats: group.stats };
+    for (let i = 0; i < cluster.length; i++) {
+      const team = cluster[i];
+      /* compare against the neighbour ranked just below it, else just above */
+      const neighbour = cluster[i + 1] ?? cluster[i - 1];
+      if (!neighbour) continue;
+      let decided = null;
+      for (const c of TIE_CRITERIA) {
+        const va = c.value(team, ctx);
+        const vb = c.value(neighbour, ctx);
+        if (va !== vb) {
+          decided = {
+            criterion: c.label,
+            you: c.fmt ? c.fmt(va, team) : `${va}`,
+            them: c.fmt ? c.fmt(vb, neighbour) : `${vb}`,
+          };
+          break;
+        }
+      }
+      out[team] = {
+        vsCode: neighbour,
+        vsName: TEAMS[neighbour].name,
+        decided,
+      };
+    }
+  });
+  return out;
+}
+
 /* =================== THIRD-PLACED TEAMS =================== */
 
 /* Rank the 12 third-placed teams; the best 8 advance.
@@ -890,6 +1001,35 @@ function describeSlot(slotToken, match) {
 /* =================== RENDERING =================== */
 const escapeHTML = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
+/* Qualification dot cell. When the team is in a points-tie, the dot doubles as
+   an info trigger: hover (desktop) / tap (mobile) shows how the tie was broken.
+   The dot keeps its qualification colour. */
+function qdotCellHTML(dotClass, dotTitle, info) {
+  const dot = `<span class="qdot ${dotClass}"></span>`;
+  if (!info) {
+    return `<td><span class="qdot-cell" title="${dotTitle}">${dot}</span></td>`;
+  }
+  let body;
+  if (info.decided) {
+    const d = info.decided;
+    body =
+      `<div class="ti-row"><span class="ti-crit">${escapeHTML(d.criterion)}</span></div>` +
+      `<div class="ti-cmp"><span class="ti-val">${escapeHTML(d.you)}</span>` +
+      `<span class="ti-vs">vs ${escapeHTML(info.vsName)}</span>` +
+      `<span class="ti-val">${escapeHTML(d.them)}</span></div>`;
+  } else {
+    /* still exactly level on every criterion (e.g. before enough games) */
+    body = `<div class="ti-row">Empate com ${escapeHTML(info.vsName)} ainda por desempatar.</div>`;
+  }
+  return (
+    `<td><span class="qdot-cell tieinfo" tabindex="0" role="button"` +
+    ` aria-label="Como foi desempatado">${dot}` +
+    `<span class="tieinfo-box" role="tooltip">` +
+    `<span class="ti-head">Desempate</span>${body}</span>` +
+    `</span></td>`
+  );
+}
+
 function channelChipsHTML(channelIds, extraClass) {
   const theme = document.documentElement.getAttribute("data-theme");
   const themeSuffix = theme === "dark" ? "_dark" : "_light";
@@ -1007,7 +1147,7 @@ function renderGroups(context) {
           ? `<span class="lockmark" title="${posInfo.locked + 1}.º lugar garantido">🔒</span>`
           : "";
       standingsHTML += `<tr class="${rowClass}">
-        <td><span class="qdot ${dotClass}" title="${dotTitle}"></span></td>
+        ${qdotCellHTML(dotClass, dotTitle, group.tieInfo[teamCode])}
         <td class="team">${TEAMS[teamCode].flag} ${escapeHTML(TEAMS[teamCode].name)}${rankingMark}${lockMark}</td>
         <td>${teamStats.played}</td><td class="cv">${teamStats.wins}</td><td class="ce">${teamStats.draws}</td><td class="cd">${teamStats.losses}</td>
         <td>${teamStats.goalsFor}</td><td>${teamStats.goalsAgainst}</td>
@@ -1658,6 +1798,18 @@ document.addEventListener("click", (event) => {
     entry.penaltyWinnerSide = entry.penaltyWinnerSide === side ? null : side;
     saveState();
     renderAll();
+  }
+});
+
+/* Tie-break info popover: tap to toggle on touch devices (hover handles desktop).
+   Tapping elsewhere closes any open popover. */
+document.addEventListener("click", (event) => {
+  const trigger = event.target.closest?.(".tieinfo");
+  const wasOpen = document.querySelector(".tieinfo.open");
+  if (wasOpen && wasOpen !== trigger) wasOpen.classList.remove("open");
+  if (trigger) {
+    event.preventDefault();
+    trigger.classList.toggle("open");
   }
 });
 

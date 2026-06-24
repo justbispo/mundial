@@ -301,7 +301,8 @@ section {
   border: 1.5px solid var(--ink);
   border-radius: 3px;
   box-shadow: 5px 5px 0 var(--shadow);
-  overflow: hidden;
+  /* visible so the tie-break info popover isn't clipped by the card */
+  overflow: visible;
 }
 .gcard-head {
   display: flex;
@@ -551,7 +552,6 @@ table.stand th:nth-child(10) {
   width: clamp(15px, 7.7cqw, max(26px, min(50px, 6.3cqw)));
   overflow: hidden;
 }
-table.stand td:nth-child(1),
 table.stand td:nth-child(3),
 table.stand td:nth-child(4),
 table.stand td:nth-child(5),
@@ -561,6 +561,11 @@ table.stand td:nth-child(8),
 table.stand td:nth-child(9),
 table.stand td:nth-child(10) {
   overflow: hidden;
+}
+/* first column holds the dot + tie-break popover, so it must not clip */
+table.stand td:nth-child(1) {
+  overflow: visible;
+  position: relative;
 }
 table.stand th {
   font-size: clamp(7px, 2vw, 11px);
@@ -631,13 +636,13 @@ table.stand th.cd {
   border-color: var(--ph);
 }
 tr.r-adv td {
-  background: rgba(46, 125, 79, 0.15);
+  background: rgba(46, 125, 79, 0.07);
 }
 tr.r-third td {
-  background: rgba(185, 138, 0, 0.15);
+  background: rgba(185, 138, 0, 0.08);
 }
 tr.r-out td {
-  background: rgba(200, 64, 31, 0.15);
+  background: rgba(200, 64, 31, 0.06);
 }
 .tiemark {
   font-size: 9px;
@@ -651,6 +656,131 @@ tr.r-out td {
   font-size: 0.78em;
   cursor: help;
   vertical-align: baseline;
+}
+
+/* the qualification dot doubles as the tie-break info trigger */
+.qdot-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.qdot-cell.tieinfo {
+  cursor: pointer;
+  outline: none;
+  /* roomy hit area so the dot is easy to tap on a phone */
+  padding: 4px;
+  margin: -4px;
+}
+/* a small "?" badge + ring make it obvious the dot is interactive when tied */
+.qdot-cell.tieinfo .qdot {
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 3px var(--ink-soft);
+}
+.qdot-cell.tieinfo::after {
+  content: "?";
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 11px;
+  height: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+  background: var(--ink-soft);
+  border: 1px solid var(--card);
+  border-radius: 50%;
+}
+.qdot-cell.tieinfo:hover .qdot,
+.qdot-cell.tieinfo.open .qdot,
+.qdot-cell.tieinfo:focus-visible .qdot {
+  box-shadow:
+    0 0 0 2px var(--card),
+    0 0 0 3px var(--red);
+}
+.qdot-cell.tieinfo:hover::after,
+.qdot-cell.tieinfo.open::after,
+.qdot-cell.tieinfo:focus-visible::after {
+  background: var(--red);
+}
+.tieinfo-box {
+  position: absolute;
+  top: calc(100% + 8px);
+  /* anchor to the left of the dot so it always extends rightward and never
+     clips on the left edge (the dot lives in the fixed first column) */
+  left: -4px;
+  z-index: 60;
+  width: max-content;
+  max-width: min(300px, 80vw);
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: 3px 3px 0 var(--shadow);
+  text-align: left;
+  white-space: normal;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+}
+.qdot-cell.tieinfo:hover .tieinfo-box,
+.qdot-cell.tieinfo.open .tieinfo-box,
+.qdot-cell.tieinfo:focus-visible .tieinfo-box {
+  opacity: 1;
+  visibility: visible;
+}
+/* little arrow pointing up at the dot */
+.tieinfo-box::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 9px;
+  border: 6px solid transparent;
+  border-bottom-color: var(--ink);
+}
+.ti-head {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+  margin-bottom: 7px;
+}
+.ti-crit {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.ti-cmp {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-top: 8px;
+  font-size: 15px;
+}
+.ti-cmp .ti-val {
+  font-weight: 900;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  color: var(--red);
+}
+.ti-cmp .ti-vs {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.ti-row {
+  font-size: 15px;
+  color: var(--ink);
 }
 
 /* fair play details */
