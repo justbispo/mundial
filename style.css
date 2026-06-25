@@ -1581,25 +1581,6 @@ html[data-theme="dark"] .bk.final .bk-head {
   color: var(--red);
   font-variant-numeric: tabular-nums;
 }
-/* a minute that links to its goal video */
-.m-scorers .sc-vid {
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-.m-scorers .sc-vid::after {
-  content: "▶";
-  font-size: 0.7em;
-  margin-left: 1px;
-  vertical-align: 0.05em;
-  text-decoration: none;
-  display: inline-block;
-}
-.m-scorers .sc-vid:hover {
-  text-decoration-style: solid;
-}
 .m-venue {
   grid-area: venue;
   display: flex;
