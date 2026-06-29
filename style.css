@@ -1007,14 +1007,7 @@ table.thirds .outx {
   text-align: center;
   text-wrap: balance;
 }
-/* live knockout match in the bracket */
-.bk.live {
-  box-shadow: inset 3px 0 0 var(--red);
-}
-.bk.live .bk-head {
-  background: rgba(200, 64, 31, 0.14);
-  color: var(--red);
-}
+/* live knockout match in the bracket: tint the whole box red */
 .bk-live {
   display: inline-flex;
   align-items: center;
@@ -1081,6 +1074,22 @@ table.thirds .outx {
 .bk-row.lose .nm {
   color: var(--ink-soft);
   font-weight: 600;
+}
+/* live knockout match in the bracket: tint the whole box red. Section
+   backgrounds are cleared so the box red shows evenly, overriding the green
+   winner highlight while the match is still live. */
+.bk.live {
+  box-shadow: inset 3px 0 0 var(--red);
+  background: rgba(200, 64, 31, 0.14);
+}
+.bk.live .bk-head {
+  color: var(--red);
+}
+.bk.live .bk-head,
+.bk.live .bk-when,
+.bk.live .bk-row,
+.bk.live .bk-row.win {
+  background: transparent;
 }
 input.ksc {
   width: 28px;
