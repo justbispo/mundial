@@ -179,6 +179,52 @@ function apiMatchToFixtureKey(matchData) {
   return null;
 }
 
+/* Write a knockout match result coming from the API into state.knockoutGames.
+   The API match id matches our KNOCKOUT_MATCHES id, and its home/away order
+   matches our slot order, so we store the score keyed by the actual teams that
+   played. Returns true if something changed. */
+function applyKnockoutResult(m) {
+  if (m.type === "group") return false;
+  const id = +m.id;
+  if (!KNOCKOUT_BY_ID[id]) return false;
+  const homeCode = teamIdToCode?.[m.home_team_id];
+  const awayCode = teamIdToCode?.[m.away_team_id];
+  if (!homeCode || !awayCode) return false;
+  if (
+    m.home_score === "" ||
+    m.away_score === "" ||
+    m.home_score == null ||
+    m.away_score == null
+  )
+    return false;
+
+  const pairingKey = `${homeCode}|${awayCode}`;
+  /* goal scorers for the calendar (keyed separately from group fixtures) */
+  state.scorers[`ko-${id}`] = {
+    home: parseScorers(m.home_scorers),
+    away: parseScorers(m.away_scorers),
+  };
+  const prev = state.knockoutGames[id];
+  /* keep any penalty winner the user already picked for the same pairing */
+  const penaltyWinnerSide =
+    prev && prev.key === pairingKey ? (prev.penaltyWinnerSide ?? null) : null;
+  const entry = {
+    key: pairingKey,
+    homeGoals: String(m.home_score),
+    awayGoals: String(m.away_score),
+    penaltyWinnerSide,
+  };
+  if (
+    prev &&
+    prev.key === entry.key &&
+    prev.homeGoals === entry.homeGoals &&
+    prev.awayGoals === entry.awayGoals
+  )
+    return false; /* score unchanged */
+  state.knockoutGames[id] = entry;
+  return true;
+}
+
 /* Fetch team mapping + all games, write scores for finished matches. */
 async function fetchAllResults() {
   const btn = document.getElementById("fetchBtn");
@@ -203,21 +249,19 @@ async function fetchAllResults() {
     let updated = 0;
     for (const m of games) {
       if (matchStatus(m) === "notstarted") continue;
+      /* knockout matches: pull the actual score into the bracket */
+      if (m.type !== "group") {
+        if (applyKnockoutResult(m)) updated++;
+        continue;
+      }
       const key = apiMatchToFixtureKey(m);
       if (!key) continue;
-      const hasScore =
-        m.home_score !== "" &&
-        m.away_score !== "" &&
-        m.home_score != null &&
-        m.away_score != null;
-      if (hasScore) {
-        state.groupScores[key] = [m.home_score, m.away_score];
-        updated++;
-      }
+      /* group results are static (data.js); we only refresh the goal scorers */
       state.scorers[key] = {
         home: parseScorers(m.home_scorers),
         away: parseScorers(m.away_scorers),
       };
+      updated++;
     }
     if (updated > 0) {
       saveState();
@@ -263,16 +307,17 @@ async function doSync() {
     if (!Array.isArray(games)) return;
     const newLive = {};
     for (const m of games) {
-      const key = apiMatchToFixtureKey(m);
-      if (!key) continue;
       const status = matchStatus(m);
       if (status === "notstarted") continue;
-      const hasScore =
-        m.home_score !== "" &&
-        m.away_score !== "" &&
-        m.home_score != null &&
-        m.away_score != null;
-      if (hasScore) state.groupScores[key] = [m.home_score, m.away_score];
+      /* knockout matches: pull the actual score into the bracket */
+      if (m.type !== "group") {
+        applyKnockoutResult(m);
+        if (status === "live") newLive[`ko-${m.id}`] = true;
+        continue;
+      }
+      const key = apiMatchToFixtureKey(m);
+      if (!key) continue;
+      /* group results are static (data.js); we only refresh the goal scorers */
       state.scorers[key] = {
         home: parseScorers(m.home_scorers),
         away: parseScorers(m.away_scorers),
@@ -307,19 +352,17 @@ function toggleSync() {
 }
 
 /* =================== STATE =================== */
-/* Everything the user types lives here and is persisted to localStorage:
-	 - groupScores:   "A0".."L5" -> [homeGoals, awayGoals] as strings
+/* Persisted to localStorage. Group results and fair-play cards are now static
+   (data.js: GROUP_RESULTS / GROUP_CARDS), so state only holds what the user
+   still controls plus scorer data pulled from the live API:
 	 - knockoutGames: matchId -> {key:"HOME|AWAY", homeGoals, awayGoals, penaltyWinnerSide}
-	 - cards:         teamCode -> [yellows, secondYellows, directReds]
 	 - scorers:       fixtureKey -> { home: [..], away: [..] } from the live API */
 const STORAGE_KEY = "wc26wallchart";
 let state;
 
 function freshState() {
   return {
-    groupScores: {},
     knockoutGames: {},
-    cards: {},
     scorers: {},
   };
 }
@@ -328,9 +371,7 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (saved && typeof saved === "object") {
       return {
-        groupScores: saved.groupScores || {},
         knockoutGames: saved.knockoutGames || {},
-        cards: saved.cards || {},
         scorers: saved.scorers || {},
       };
     }
@@ -350,7 +391,7 @@ function saveState() {
 /* Conduct ("fair play") score: -1 yellow, -3 second yellow, -4 direct red.
 	 Higher (closer to 0) is better. */
 function conductScore(teamCode) {
-  const cards = state.cards[teamCode] || [0, 0, 0];
+  const cards = GROUP_CARDS[teamCode] || [0, 0, 0];
   const yellows = +cards[0] || 0,
     secondYellows = +cards[1] || 0;
   const directReds = +cards[2] || 0;
@@ -381,7 +422,7 @@ function computeGroup(groupLetter) {
 
   const playedResults = [];
   fixtures.forEach((fixture, index) => {
-    const score = state.groupScores[groupLetter + index];
+    const score = GROUP_RESULTS[groupLetter + index];
     if (
       !score ||
       score[0] === "" ||
@@ -1067,7 +1108,7 @@ function renderGroups(context) {
     /* fixtures + score inputs */
     let fixturesHTML = "";
     GROUP_FIXTURES[groupLetter].forEach((fixture, index) => {
-      const score = state.groupScores[groupLetter + index] || ["", ""];
+      const score = GROUP_RESULTS[groupLetter + index] || ["", ""];
       const fixtureKey = `${groupLetter}${index}`;
       const isLive = liveKeys[fixtureKey];
       const liveBadge = isLive ? `<span class="live-min">AO VIVO</span>` : "";
@@ -1075,8 +1116,9 @@ function renderGroups(context) {
         <span class="d"><b>${fixture.date}</b><b>${fixture.time}</b>${liveBadge}</span>
         <span class="h">${escapeHTML(TEAMS[fixture.home].name)} ${TEAMS[fixture.home].flag}</span>
         <span class="mid">
-          <input class="sc" data-k="gs-${groupLetter}${index}-0" value="${score[0] ?? ""}" placeholder="·" inputmode="numeric" maxlength="2">
-          <input class="sc" data-k="gs-${groupLetter}${index}-1" value="${score[1] ?? ""}" placeholder="·" inputmode="numeric" maxlength="2">
+          <span class="sc">${escapeHTML(String(score[0] ?? "·"))}</span>
+          <span class="sc-sep">–</span>
+          <span class="sc">${escapeHTML(String(score[1] ?? "·"))}</span>
         </span>
         <span class="a">${TEAMS[fixture.away].flag} ${escapeHTML(TEAMS[fixture.away].name)}</span>
         ${channelChipsHTML(fixture.channels)}
@@ -1164,12 +1206,12 @@ function renderGroups(context) {
     /* tie-break drawer: cards per team */
     let cardsHTML = "";
     group.order.forEach((teamCode) => {
-      const cards = state.cards[teamCode] || ["", "", ""];
+      const cards = GROUP_CARDS[teamCode] || [0, 0, 0];
       cardsHTML += `<tr>
         <td class="tl">${TEAMS[teamCode].flag} ${escapeHTML(TEAMS[teamCode].name)}</td>
-        <td><input class="fpi" data-k="fp-${teamCode}-0" value="${cards[0] ?? ""}" inputmode="numeric" maxlength="2"></td>
-        <td><input class="fpi" data-k="fp-${teamCode}-1" value="${cards[1] ?? ""}" inputmode="numeric" maxlength="2"></td>
-        <td><input class="fpi" data-k="fp-${teamCode}-2" value="${cards[2] ?? ""}" inputmode="numeric" maxlength="2"></td>
+        <td>${+cards[0] || 0}</td>
+        <td>${+cards[1] || 0}</td>
+        <td>${+cards[2] || 0}</td>
         <td><b>${conductScore(teamCode)}</b></td>
         <td>#${TEAMS[teamCode].fifaRank}</td>
       </tr>`;
@@ -1250,6 +1292,7 @@ function knockoutBoxHTML(matchId, context, extraClass) {
   const result =
     knockoutCache[matchId] || computeKnockoutResult(matchId, context);
   const entry = state.knockoutGames[matchId];
+  const isLive = !!liveKeys[`ko-${matchId}`];
   const pairingKey =
     result.home && result.away ? `${result.home}|${result.away}` : null;
   const scores =
@@ -1336,8 +1379,8 @@ function knockoutBoxHTML(matchId, context, extraClass) {
       ? `<span class="w-piece">${whenParts[0]} ·</span> <span class="w-piece"><b>${whenParts[1]}</b> ·</span> <span class="w-piece">${venue}</span>`
       : match.when;
 
-  return `<div class="bk ${extraClass || ""}">
-    <div class="bk-head"><span>J${matchId} · ${roundLabel}</span></div>
+  return `<div class="bk ${extraClass || ""}${isLive ? " live" : ""}">
+    <div class="bk-head"><span>J${matchId} · ${roundLabel}</span>${isLive ? `<span class="bk-live">AO VIVO</span>` : ""}</div>
     <div class="bk-when">${whenHTML}</div>
     ${teamRowHTML(result.home, match.slots[0], scores[0], 0)}
     ${teamRowHTML(result.away, match.slots[1], scores[1], 1)}
@@ -1487,7 +1530,7 @@ function buildAllMatches(context) {
   GROUP_LETTERS.forEach((groupLetter) => {
     GROUP_FIXTURES[groupLetter].forEach((fixture, index) => {
       const fixtureKey = `${groupLetter}${index}`;
-      const score = state.groupScores[fixtureKey];
+      const score = GROUP_RESULTS[fixtureKey];
       const hasScore =
         score &&
         score[0] !== "" &&
@@ -1540,7 +1583,8 @@ function buildAllMatches(context) {
       homeScore: hasScore ? entry.homeGoals : null,
       awayScore: hasScore ? entry.awayGoals : null,
       penalties: hasScore && result.wentToPenalties ? result.winner : null,
-      live: null,
+      live: liveKeys[`ko-${match.id}`] || null,
+      scorers: state.scorers[`ko-${match.id}`] || null,
       channels: match.channels,
       stadiumId: KO_MATCH_STADIUM[match.id],
     });
@@ -1773,10 +1817,8 @@ function rerenderKeepingFocus() {
 }
 
 /* =================== EVENTS =================== */
-/* All inputs carry data-k="kind-id-side":
-	 gs-A0-0  -> group score, fixture A0, home side
-	 fp-MEX-2 -> cards (fair play), team MEX, column 2 (direct reds)
-	 ko-89-1  -> knockout score, match 89, away side */
+/* Knockout score inputs carry data-k="ko-matchId-side" (e.g. ko-89-1). Group
+   results and fair-play cards are no longer editable — they come from data.js. */
 document.addEventListener("input", (event) => {
   const inputKey = event.target.dataset?.k;
   if (!inputKey) return;
@@ -1785,13 +1827,7 @@ document.addEventListener("input", (event) => {
   if (cleanValue !== event.target.value) event.target.value = cleanValue;
 
   const [kind, id, side] = inputKey.split("-");
-  if (kind === "gs") {
-    if (!state.groupScores[id]) state.groupScores[id] = ["", ""];
-    state.groupScores[id][+side] = cleanValue;
-  } else if (kind === "fp") {
-    if (!state.cards[id]) state.cards[id] = ["", "", ""];
-    state.cards[id][+side] = cleanValue;
-  } else if (kind === "ko") {
+  if (kind === "ko") {
     const matchId = +id;
     clearKnockoutCache();
     const context = buildTournamentContext();
@@ -1843,7 +1879,7 @@ document.addEventListener("click", (event) => {
 });
 
 document.getElementById("resetBtn").addEventListener("click", () => {
-  if (confirm("Limpar todos os resultados, cartões e escolhas do quadro?")) {
+  if (confirm("Limpar todas as escolhas que inseriste na fase a eliminar?")) {
     state = freshState();
     saveState();
     renderAll();
@@ -1851,12 +1887,7 @@ document.getElementById("resetBtn").addEventListener("click", () => {
 });
 
 document.getElementById("clearResultsBtn")?.addEventListener("click", () => {
-  if (
-    confirm(
-      "Limpar apenas os resultados (grupo + eliminatórias)? Os cartões de conduta mantêm-se.",
-    )
-  ) {
-    state.groupScores = {};
+  if (confirm("Limpar os resultados da fase a eliminar que inseriste?")) {
     state.knockoutGames = {};
     saveState();
     renderAll();
