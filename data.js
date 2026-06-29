@@ -1588,7 +1588,7 @@ const KNOCKOUT_MATCHES = [
     id: 86,
     slots: ["1J", "2H"],
     when: "03/07 · 23:00 · Miami",
-    channels: ["s5", "lm"],
+    channels: ["tvi", "s5", "lm"],
   },
   {
     id: 87,
