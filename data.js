@@ -1607,7 +1607,7 @@ const KNOCKOUT_MATCHES = [
     id: 89,
     slots: ["W74", "W77"],
     when: "04/07 · 22:00 · Filadélfia",
-    channels: ["sic", "lm", "s5"],
+    channels: ["sic", "lm", "s1", "s5"],
   },
   {
     id: 90,
