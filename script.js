@@ -1623,18 +1623,22 @@ function matchResultHTML(match) {
    space, and some names carry a stray bidi control char that must be stripped. */
 function parseScorerEntry(s) {
   /* drop bidi/zero-width control chars that corrupt rendering (e.g. U+202B) */
-  const str = String(s)
+  let str = String(s)
     .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
     .trim();
-  const m = str.match(
-    /^(.*?)\s*(\d+\s*['′]?\s*(?:\+\s*\d+\s*['′]?)?)\s*(\([^)]*\))?\s*$/,
-  );
-  if (!m) return { name: str, min: "", tag: "" };
+  /* pull out a (p)/(og) tag wherever it sits — the API places it inconsistently
+     (12'(p), 17' (p), 45'+5'(p), 125(P)', 31'(P), 7'(OG)) */
+  let tag = "";
+  const tagMatch = str.match(/\(([^)]*)\)/);
+  if (tagMatch) {
+    tag = tagMatch[1].toLowerCase();
+    str = str.replace(tagMatch[0], " ").trim();
+  }
+  const m = str.match(/^(.*?)\s*(\d+\s*['′]?\s*(?:\+\s*\d+\s*['′]?)?)\s*$/);
+  if (!m) return { name: str, min: "", tag: `(${tag})` };
   const name = m[1].trim();
   const min = `${m[2].replace(/\s+/g, "").replace(/['′]/g, "")}'`;
-  /* normalise the tag: (p) penalty, (og) own goal, lower-cased */
-  const tag = (m[3] || "").toLowerCase();
-  return { name, min, tag };
+  return { name, min, tag: tag ? `(${tag})` : "" };
 }
 
 /* Build the scorer list for one side. Each entry from the API is one goal; if
