@@ -1619,7 +1619,7 @@ const KNOCKOUT_MATCHES = [
     id: 91,
     slots: ["W76", "W78"],
     when: "05/07 · 21:00 · Nova Iorque",
-    channels: ["s5"],
+    channels: ["s5", "lm"],
   },
   {
     id: 92,
@@ -1643,7 +1643,7 @@ const KNOCKOUT_MATCHES = [
     id: 95,
     slots: ["W86", "W88"],
     when: "07/07 · 17:00 · Atlanta",
-    channels: ["s5"],
+    channels: ["s5", "lm"],
   },
   {
     id: 96,
@@ -1685,7 +1685,7 @@ const KNOCKOUT_MATCHES = [
     id: 102,
     slots: ["W99", "W100"],
     when: "15/07 · 20:00 · Atlanta",
-    channels: ["s"],
+    channels: ["s1", "s5"],
   },
   {
     id: 103,
