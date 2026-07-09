@@ -9,7 +9,7 @@
  *     stay fresh.
  * Bump CACHE_VERSION whenever the shell files change to force an update.
  */
-const CACHE_VERSION = "mundial26-v22";
+const CACHE_VERSION = "mundial26-v23";
 const APP_SHELL = [
   "./",
   "./index.html",

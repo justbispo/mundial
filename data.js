@@ -1655,19 +1655,19 @@ const KNOCKOUT_MATCHES = [
     id: 97,
     slots: ["W89", "W90"],
     when: "09/07 · 21:00 · Boston",
-    channels: ["s1", "s5"],
+    channels: ["tvi", "s1", "s5", "lm"],
   },
   {
     id: 98,
     slots: ["W93", "W94"],
     when: "10/07 · 20:00 · Los Angeles",
-    channels: ["s1", "s5"],
+    channels: ["s1", "s5", "lm"],
   },
   {
     id: 99,
     slots: ["W91", "W92"],
     when: "11/07 · 22:00 · Miami",
-    channels: ["s5"],
+    channels: ["sic", "s5", "lm"],
   },
   {
     id: 100,
@@ -1691,13 +1691,13 @@ const KNOCKOUT_MATCHES = [
     id: 103,
     slots: ["L101", "L102"],
     when: "18/07 · 22:00 · Miami",
-    channels: ["s"],
+    channels: ["s1", "s5"],
   },
   {
     id: 104,
     slots: ["W101", "W102"],
     when: "19/07 · 20:00 · Nova Iorque",
-    channels: ["rtp", "s", "lm"],
+    channels: ["rtp", "s1", "s5", "lm"],
   },
 ];
 const KNOCKOUT_BY_ID = {};
